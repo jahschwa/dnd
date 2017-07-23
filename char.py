@@ -17,134 +17,331 @@
 #> 17,14,13
 
 # TODO: conditional bonuses
+# TODO: consider another way for set_stat() to interact with plug/unplug?
+# TODO: decide what goes in here and what goes in the CLI
 
 import time
 from collections import OrderedDict
 
+class DependencyError(Exception):
+  pass
+
 class Character(object):
+
+  STATS = {}
 
   def __init__(self):
 
     self.stats = OrderedDict()
-    self.bonuses = {}
-    self.events = {}
+    self.bonuses = OrderedDict()
+    self.events = OrderedDict()
+    self.setup()
 
   def add_stat(self,stat):
+    if stat.name in self.stats:
+      raise ValueError('Stat "%s" already exists' % stat.name)
     self.stats[stat.name] = stat
 
-  def new_stat(self,name,text='',formula='0',updated=None):
-    self.add_stat(Stat(self,name,text,formula,updated))
+  def stat(self,name,formula='0',text='',updated=None):
+    stat = Stat(name,formula,text,updated)
+    stat.plug(self)
+    self.add_stat(stat)
 
-  def set_stat(self,name,formula):
+  def get_stat(self,name):
+    return self.stats[name]
+
+  def remove_stat(self,name):
     stat = self.stats[name]
-    stat.formula = formula
-    stat.calc()
+    try:
+      stat.unplug()
+    except DependencyError:
+      return False
+    return True
 
-  def setup(self,name):
-    """create objects for default char"""
+  def set_stat(self,name,formula=None,text=None,updated=None):
+    old = self.stats[name]
+    new = old.copy(text=text,formula=formula,updated=updated)
+    new.usedby = set(old.usedby)
+    if new.usedby:
+      new.root = False
+    old.unplug(force=True)
+    try:
+      self.stats[name] = new
+      new.plug(self)
+    except KeyError:
+      old.formula = old.original
+      old.plug(self)
+      self.stats[name] = old
+      return False
+    return True
 
-    for (name,formula) in eval(name.upper()).items():
-      self.new_stat(name,'',str(formula))
+  def add_bonus(self,bonus):
+    if bonus.name in self.bonuses:
+      raise ValueError('Bonus "%s" already exists' % bonus.name)
+    self.bonuses[bonus.name] = bonus
+
+  def bonus(self,name,value,stats,text=None,active=True,typ=None):
+    bonus = Bonus(name,value,stats,text,active,typ)
+    self.add_bonus(bonus)
+    bonus.plug(self)
+
+  def get_bonus(self,name):
+    return self.bonuses[name]
+
+  def set_bonus(self,name,value):
+    bonus = self.bonuses[name]
+    bonus.value = value
+    bonus.calc()
+
+  def on(self,name):
+    self.bonuses[name].on()
+
+  def off(self,name):
+    self.bonuses[name].off()
+
+  def revert(self,name):
+    self.bonuses[name].revert()
+
+  def setup(self):
+    for (name,formula) in self.STATS.items():
+      self.stat(name,str(formula))
 
 class Stat(object):
 
-  def __init__(self,char,name,text='',formula='0',bonuses=None,updated=None):
+  VARS = {'$':'self.char.stats["%s"].value',
+      '#':'self.char.stats["%s"].normal'
+  }
 
-    self.char = char
+  def __init__(self,name,formula='0',text='',bonuses=None,updated=None):
+
+    self.char = None
     self.name = name
-    self.uses = []
-    self.usedby = []
-    self.value = None
-    self.bonuses = bonuses or []
+    self.text = text
+    self.formula = str(formula)
+    self.original = self.formula
+    self.bonuses = bonuses or {}
     self.updated = time.time() if updated is None else updated
-    self.dirty = True
+
+    self.uses = set()
+    self.usedby = set()
+    self.normal = None
+    self.value = None
     self.root = True
     self.leaf = True
-    self.parse(formula)
 
-  def parse(self,s):
+  def plug(self,char):
 
-    for name in self.char.stats:
-      if '$'+name in s:
-        s = s.replace('$'+name,'self.char.stats["%s"].value' % name)
-        self.uses.append(name)
-        self.leaf = False
-        stat = self.char.stats[name]
-        stat.usedby.append(self.name)
-        stat.root = False
+    self.char = char
+
+    s = self.formula
+    usedby = set()
+    for name in char.stats:
+      for (var,expand) in self.VARS.items():
+        if var+name in s:
+          s = s.replace(var+name,expand % name)
+          self.uses.add(name)
+          self.leaf = False
+          usedby.add(char.stats[name])
+
+    try:
+      eval(s)
+    except Exception as e:
+      raise KeyError
+
+    for stat in usedby:
+      stat.usedby.add(self.name)
+      stat.root = False
+
     self.formula = s
     self.calc()
 
+  def unplug(self,force=False,recursive=False):
+
+    if not self.char:
+      raise RuntimeError('plug() must be called before calc()')
+
+    if self.usedby and not force and not recursive:
+      raise DependencyError(str(self.usedby))
+
+    if recursive:
+      for name in self.usedby:
+        stat = self.char.stats[name]
+        stat.unplug(recursive=recursive)
+    self.usedby = set()
+
+    self.formula = self.original
+
+    for name in self.uses:
+      stat = self.char.stats[name]
+      stat.usedby.remove(self.name)
+      if not stat.usedby:
+        stat.root = True
+    self.uses = set()
+
+    self.root = True
+    self.leaf = True
+    self.char = None
+
   def calc(self):
 
-    self.dirty = False
-    old = self.value
+    if not self.char:
+      raise RuntimeError('plug() must be called before calc()')
+
+    old_v = self.value
+    old_n = self.normal
+    self.normal = eval(self.formula.replace('.value','.normal'))
     self.value = eval(self.formula)
-    for bonus in self.bonuses:
-      if bonus.active:
-        self.value += bonus.value
-    if old!=self.value:
+    for (typ,bonuses) in self.bonuses.items():
+      bonuses = [b.value for b in bonuses if b.active]
+      if not bonuses:
+        continue
+      if Bonus.stacks(typ):
+        self.value += sum(bonuses)
+      else:
+        self.value += max(bonuses)
+    if old_v!=self.value or old_n!=self.normal:
       for stat in self.usedby:
         stat = self.char.stats[stat]
-        stat.dirty = True
         stat.calc()
+
+  def add_bonus(self,bonus):
+
+    typ = bonus.typ
+    if typ in self.bonuses:
+      self.bonuses[typ].append(bonus)
+    else:
+      self.bonuses[typ] = [bonus]
+
+  def copy(self,name=None,text=None,formula=None,bonuses=None,updated=None):
+
+    for var in ('name','text','bonuses','updated'):
+      exec('%s = %s or self.%s' % ((var,)*3))
+    formula = formula or self.original
+    return Stat(name,formula,text,bonuses,updated)
 
   def __str__(self):
     return '%s = %s' % (self.name,self.value)
 
 class Bonus(object):
 
-  def __init__(self,char,name,value,stats,active=True,typ=None):
+  TYPES = ('alchemical','armor','circumstance','competence','defelction',
+      'dodge','enhancement','inherent','insight','luck','morale',
+      'natural_armor','profane','racial','resistance','sacred','shield',
+      'size','trait','penalty','none')
 
-    self.char = char
+  @staticmethod
+  def stacks(typ):
+    return typ in ('none','dodge','circumstance','racial','penalty')
+
+  def __init__(self,name,value,stats,text=None,active=True,typ=None):
+
     self.name = name
     self.value = value
+    self.stats = stats if isinstance(stats,list) else [stats]
+    self.text = text or ''
     self.active = active
-    self.typ = typ
-    self.plug(stats if isinstance(stats,list) else [stats])
 
-  def plug(self,stats):
+    self.typ = typ.lower() or 'none'
+    if self.typ not in Bonus.TYPES:
+      raise ValueError('Invalid bonus type "%s"' % self.typ)
 
-    for name in stats:
-      stat = self.char.stats[name]
-      stat.bonuses.append(self)
+    self.char = None
+    self.last = active
+
+  def plug(self,char):
+
+    for name in self.stats:
+      stat = char.stats[name]
+      stat.add_bonus(self)
       stat.calc()
+    self.char = char
+
+  def calc(self):
+
+    for name in self.stats:
+      self.char.stats[name].calc()
+
+  def on(self):
+    self.toggle(True)
+
+  def off(self):
+    self.toggle(False)
+
+  def toggle(self,new):
+
+    self.last = self.active
+    self.active = new
+    self.calc()
+
+  def revert(self):
+
+    if self.active==self.last:
+      return
+    self.active = self.last
+    self.calc()
+
+  def __str__(self):
+    return '%s + %s' % (self.name,self.value)
 
 class Effect(object):
 
-  def __init__(self,char):
+  def __init__(self):
+    raise NotImplementedError
 
-    self.char = char
+class Text(object):
+
+  def __init__(self):
+    raise NotImplementedError
 
 class Event(object):
 
-  def __init__(self,char):
+  # hp<=0, nonlethal>=hp
 
-    self.char = char
+  def __init__(self):
+    raise NotImplementedError
 
 ###############################################################################
 
-PATHFINDER = OrderedDict([
+class Pathfinder(Character):
 
-('strength',10), ('dexterity',10), ('constitution',10),
-('intelligence',10), ('wisdom',10), ('charisma',10),
-('str','int(($strength-10)/2)'),
-('dex','int(($dexterity-10)/2)'),
-('con','int(($constitution-10)/2)'),
-('int','int(($intelligence-10)/2)'),
-('wis','int(($wisdom-10)/2)'),
-('cha','int(($charisma-10)/2)'),
+  STATS = OrderedDict([
 
-('ac_armor',0),('ac_shield',0),('ac_dex','$dex'),('ac_size','0'),
-('ac_nat',0),('ac_deflect',0),('ac_misc',0),
-('ac','10+$ac_armor+$ac_shield+$ac_dex+$ac_size+$ac_nat+$ac_deflect+$ac_misc'),
-('touch','10+$ac_dex+$ac_size+$ac_deflect+$ac_misc'),
-('ff','10+$ac_armor+$ac_shield+$ac_size+$ac_nat+$ac_deflect+$ac_misc'),
+  ('level',1),('hd','$level'),
 
-('bab',0),('melee','$bab+$str'),('ranged','$bab+$dex'),
+  ('strength',10), ('dexterity',10), ('constitution',10),
+  ('intelligence',10), ('wisdom',10), ('charisma',10),
+  ('str','int(($strength-10)/2)'),
+  ('dex','int(($dexterity-10)/2)'),
+  ('con','int(($constitution-10)/2)'),
+  ('int','int(($intelligence-10)/2)'),
+  ('wis','int(($wisdom-10)/2)'),
+  ('cha','int(($charisma-10)/2)'),
 
-('cmb','$melee-$ac_size'),('cmd','10+$bab+$str+$ac_dex+$ac_deflect+$ac_misc'),
-])
+  ('hp_max',0),('hp','$hp_max+$hd*($con-#con)'),('nonlethal',0),
+  ('initiative','$dex'),('dr',0),('speed',30),
+
+  ('ac_armor',0),('ac_shield',0),('ac_dex','$dex'),('ac_size','0'),
+  ('ac_nat',0),('ac_deflect',0),('ac_misc',0),
+  ('ac','10+$ac_armor+$ac_shield+$ac_dex+$ac_size+$ac_nat+$ac_deflect+$ac_misc'),
+  ('touch','10+$ac_dex+$ac_size+$ac_deflect+$ac_misc'),
+  ('ff','10+$ac_armor+$ac_shield+$ac_size+$ac_nat+$ac_deflect+$ac_misc'),
+
+  ('fortitude','$con'),('reflex','$dex'),('will','$wis'),
+
+  ('bab',0),('sr',0),('melee','$bab+$str'),('ranged','$bab+$dex'),
+
+  ('cmb','$melee-$ac_size'),('cmd','10+$bab+$str+$ac_dex+$ac_deflect+$ac_misc'),
+
+  ])
+
+  def damage(self,dmg,nonlethal=False):
+    raise NotImplementedError
+
+  def ranks(self):
+    raise NotImplementedError
+
+  def bonus_ac(self,name,value,typ,text=None,active=True):
+    raise NotImplementedError
 
 ###############################################################################
 

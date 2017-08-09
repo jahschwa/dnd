@@ -20,6 +20,17 @@
 # TODO: consider another way for set_stat() to interact with plug/unplug?
 # TODO: decide what goes in here and what goes in the CLI
 
+# Stat
+# Bonus
+# Effect
+# Item
+#   Weapon
+#   Armor
+# Dice
+# Ability
+# Event
+# Text
+
 import time
 from collections import OrderedDict
 
@@ -34,6 +45,9 @@ class Character(object):
 
     self.stats = OrderedDict()
     self.bonuses = OrderedDict()
+    self.effects = OrderedDict()
+    self.items = OrderedDict()
+    self.abilities = OrderedDict()
     self.events = OrderedDict()
     self.setup()
 
@@ -158,7 +172,7 @@ class Stat(object):
   def unplug(self,force=False,recursive=False):
 
     if not self.char:
-      raise RuntimeError('plug() must be called before calc()')
+      return
 
     if self.usedby and not force and not recursive:
       raise DependencyError(str(self.usedby))
@@ -241,7 +255,7 @@ class Bonus(object):
     self.text = text or ''
     self.active = active
 
-    self.typ = typ.lower() or 'none'
+    self.typ = (typ or 'none').lower()
     if self.typ not in Bonus.TYPES:
       raise ValueError('Invalid bonus type "%s"' % self.typ)
 
@@ -320,7 +334,9 @@ class Pathfinder(Character):
   ('hp_max',0),('hp','$hp_max+$hd*($con-#con)'),('nonlethal',0),
   ('initiative','$dex'),('dr',0),('speed',30),
 
-  ('ac_armor',0),('ac_shield',0),('ac_dex','$dex'),('ac_size','0'),
+  ('armor_check',0),('max_dex',99),('spell_fail',0),
+
+  ('ac_armor',0),('ac_shield',0),('ac_dex','min($dex,$max_dex)'),('ac_size','0'),
   ('ac_nat',0),('ac_deflect',0),('ac_misc',0),
   ('ac','10+$ac_armor+$ac_shield+$ac_dex+$ac_size+$ac_nat+$ac_deflect+$ac_misc'),
   ('touch','10+$ac_dex+$ac_size+$ac_deflect+$ac_misc'),
@@ -332,7 +348,28 @@ class Pathfinder(Character):
 
   ('cmb','$melee-$ac_size'),('cmd','10+$bab+$str+$ac_dex+$ac_deflect+$ac_misc'),
 
+  ('acrobatics','$dex'),('appraise','$int'),('bluff','$cha'),('climb','$str'),
+  ('diplomacy','$cha'),('disable_device','$dex'),('disguise','$cha'),
+  ('escape_artist','$dex'),('fly','$dex'),('handle_animal','$cha'),
+  ('heal','$wis'),('intimidate','$cha'),
+
+  ('knowledge_arcana','$int'),('knowledge_dungeoneering','$int'),
+  ('knowledge_engineering','$int'),('knowledge_geography','$int'),
+  ('knowledge_history','$int'),('knowledge_local','$int'),
+  ('knowledge_nature','$int'),('knowledge_nobility','$int'),
+  ('knowledge_planes','$int'),('knowledge_religion','$int'),
+
+  ('linguisitics','$int'),('perception','$wis'),('ride','$dex'),
+  ('sense_motive','$wis'),('sleight_of_hand','$dex'),('spellcraft','$int'),
+  ('stealth','$dex'),('survival','$wis'),('swim','$str'),
+  ('use_magic_device','$cha'),
+
   ])
+
+  # TODO: conditional jump modifier based on move speed
+  # TODO: craft, profession, perform
+  # TODO: class skills
+  # TODO: max_dex
 
   def damage(self,dmg,nonlethal=False):
     raise NotImplementedError

@@ -16,6 +16,7 @@
 #get ac,ff,touch
 #> 17,14,13
 
+# TODO: set should raise exception not return a boolean
 # TODO: conditional bonuses
 # TODO: consider another way for set_stat() to interact with plug/unplug?
 # TODO: decide what goes in here and what goes in the CLI
@@ -51,20 +52,23 @@ class Character(object):
     self.events = OrderedDict()
     self.setup()
 
-  def add_stat(self,stat):
+    self.export = ['on','off','revert']
+    self.export_prefix = ['add','get','set','del']
+
+  def stat(self,stat):
     if stat.name in self.stats:
       raise ValueError('Stat "%s" already exists' % stat.name)
     self.stats[stat.name] = stat
 
-  def stat(self,name,formula='0',text='',updated=None):
+  def add_stat(self,name,formula='0',text='',updated=None):
     stat = Stat(name,formula,text,updated)
     stat.plug(self)
-    self.add_stat(stat)
+    self.stat(stat)
 
   def get_stat(self,name):
     return self.stats[name]
 
-  def remove_stat(self,name):
+  def del_stat(self,name):
     stat = self.stats[name]
     try:
       stat.unplug()
@@ -89,14 +93,14 @@ class Character(object):
       return False
     return True
 
-  def add_bonus(self,bonus):
+  def bonus(self,bonus):
     if bonus.name in self.bonuses:
       raise ValueError('Bonus "%s" already exists' % bonus.name)
     self.bonuses[bonus.name] = bonus
 
-  def bonus(self,name,value,stats,text=None,active=True,typ=None):
-    bonus = Bonus(name,value,stats,text,active,typ)
-    self.add_bonus(bonus)
+  def add_bonus(self,name,value,stats,text=None,active=True,typ=None):
+    bonus = Bonus(name,int(value),stats,text,active,typ)
+    self.bonus(bonus)
     bonus.plug(self)
 
   def get_bonus(self,name):
@@ -106,6 +110,10 @@ class Character(object):
     bonus = self.bonuses[name]
     bonus.value = value
     bonus.calc()
+
+  def del_bonus(self,name):
+    self.bonuses[name].unplug()
+    del self.bonuses[name]
 
   def on(self,name):
     self.bonuses[name].on()
@@ -118,7 +126,7 @@ class Character(object):
 
   def setup(self):
     for (name,formula) in self.STATS.items():
-      self.stat(name,str(formula))
+      self.add_stat(name,str(formula))
 
 class Stat(object):
 
@@ -226,6 +234,12 @@ class Stat(object):
     else:
       self.bonuses[typ] = [bonus]
 
+  def del_bonus(self,bonus):
+
+    self.bonuses[typ] = [b for b in self.bonuses[typ] if b is not bonus]
+    if not self.bonuses[typ]:
+      del self.bonuses[typ]
+
   def copy(self,name=None,text=None,formula=None,bonuses=None,updated=None):
 
     for var in ('name','text','bonuses','updated'):
@@ -269,6 +283,17 @@ class Bonus(object):
       stat.add_bonus(self)
       stat.calc()
     self.char = char
+
+  def unplug(self):
+
+    if not self.char:
+      return
+
+    for name in self.stats:
+      stat = self.char.stats[name]
+      stat.del_bonus(self)
+      stat.calc()
+    self.char = None
 
   def calc(self):
 

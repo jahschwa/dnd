@@ -1,10 +1,24 @@
 #!/usr/bin/env python
 # encoding: utf8
+#
+# examples:
+#
+# DICE = '1d20'; '4d10+5'; '2d53+7d9+-50'
+# the dice that will be rolled
+#
+# REROLL = [1]; [1,2]; [1,6]
+# reroll the listed values once
+#
+# DROP = 1; 2; 3
+# drop the n lowest rolls
+#
+# SIMS = 100; 1000; 1000000
+# number of simulations to run
 
 import random,time
 from collections import OrderedDict
 
-DICE = '1d20'
+DICE = '6d4+12'
 REROLL = []
 DROP = 0
 SIMS = 1000000
@@ -24,8 +38,8 @@ def cumsum(lis):
 
     total = 0
     for x in lis:
-        total += x
-        yield total
+      total += x
+      yield total
 
 def simulate():
 
@@ -64,7 +78,7 @@ def simulate():
         total += o
     result[total] += 1
 
-  return {a:100.0*b/SIMS for (a,b) in result.items()}
+  return OrderedDict([(a,100.0*b/SIMS) for (a,b) in result.items()])
 
 if __name__ == '__main__':
   main()

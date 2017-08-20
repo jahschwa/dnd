@@ -1,42 +1,85 @@
 #!/usr/bin/env python
 
-#def stat ac_dex 3
-#def stat ac_armor 0
-#def stat ff 10+ac_armor
-#def stat touch 10+ac_dex
-#def stat ac 10+ac_dex+ac_armor
-#get ac
-#> 13
-#def bonus mage_armor ac_armor +4
-#get ac,ff,touch
-#> 13,10,13
-#get ac,ff,touch with mage_armor
-#> 17,14,13
-#active mage_armor
-#get ac,ff,touch
-#> 17,14,13
+# ===== WORKING EXAMPLES =====
+#
+# >>> new
+# >>> set stat dexterity 17
+# >>> get stat ac
+# ac = 13
+#
+# >>> g s ac
+# ac = 13
+#
+# >>> add bonus mage_armor 4 ac_armor armor
+# >>> get stat ac,ff,touch
+# ac = 17
+# ff = 14
+# touch = 13
+#
+# >>> off mage_armor
+# >>> get stat ac,ff,touch
+# ac = 13
+# ff = 10
+# touch = 13
+#
+# >>> all bonus mage_armor
+#  value | 4
+# active | False
+#   type | armor
+# revert | change
+#  stats | ac_armor
+#   text | 
+#
+# ===== PLANNED FOR THE FUTURE =====
+#
+# >>> get ac,ff,touch with mage_armor
+# ac = 17
+# ff = 14
+# touch = 13
+#
+# >>> get stat ac,ff,touch
+# ac = 13
+# ff = 10
+# touch = 13
 
+# ===== QUICK COMMAND LISTING =====
+#
+# implemented types: stat bonus
+#
+# load
+# new
+# save
+#
+# search [name]
 # get [type] [name]
 # set [type] name [options]
-# new type name [options]
-# on/off name
+# add type name [options]
+# del type name
+# all type name
+# on bonus
+# off bonus
+# revert bonus
+#
+# eval command
+# exec command
+#
+# ===== NOT IMPLEMENTED =====
 # time num [rd|min|hr|day]
 # ++
 # use name
 # reset [name]
-# revert [name]
+# revert
 
+# ===== TODO =====
+#
 # [TODO] help text
 # [TODO] autocompletions
 # [TODO] consider managing multiple characters
+# [TODO] better exception messages, especially for num args
 
-import sys,os,pickle,cmd,inspect
+import sys,os,pickle,cmd,inspect,traceback
 
 import char
-
-############################ <DEV>
-import traceback
-############################ </DEV>
 
 def main(fname):
 
@@ -63,20 +106,17 @@ class CLI(cmd.Cmd):
 
 ############################ <DEV>
 
-  def do_echo(self,args):
-    print args
-
   def do_eval(self,args):
     try:
       print eval(' '.join(args))
-    except Exception as e:
-      print traceback.format_exc(e)
+    except:
+      print traceback.format_exc()
 
   def do_exec(self,args):
     try:
       exec ' '.join(args)
-    except Exception as e:
-      print traceback.format_exc(e)
+    except:
+      print traceback.format_exc()
 
 ############################ </DEV>
 
@@ -105,15 +145,15 @@ class CLI(cmd.Cmd):
     args = line.split()
     return (args[0] if args else '',args[1:],line)
 
-#  def precmd(self,line):
-#    for c in ('EOF','','')
-
   def emptyline(self):
     pass
 
+  def postcmd(self,stop,line):
+    print ''
+    return stop
+
   def do_EOF(self,line):
     if self.overwrite():
-      print ''
       return True
 
   def overwrite(self):
@@ -127,22 +167,27 @@ class CLI(cmd.Cmd):
     return False
 
   def default(self,line):
-    args = line.split()
+    args = [a.split(',') if ',' in a else a for a in line.split()]
     if args[0] in self.exported:
       val = self.exported[args[0]]
       if isinstance(val,dict):
         if args[1] in val:
-          result = val[args[1]](*args[2:])
-          if result:
-            print result
+          (func,args) = (val[args[1]],args[2:])
         else:
           print 'Unknown sub-command "%s"' % args[1]
       else:
-        result = val(*args[1:])
-        if result:
-          print result
+        (func,args) = (val,args[1:])
     else:
       print 'Unknown command "%s"' % args[0]
+      return
+
+    try:
+      result = func(*args)
+    except:
+      print '*** '+traceback.format_exc().split('\n')[-2]
+      return
+    if result:
+      print result
 
   def plug(self,char):
     self.unplug()
@@ -156,6 +201,13 @@ class CLI(cmd.Cmd):
         if name.startswith(prefix+'_'):
           name = name[len(prefix)+1:]
           self.exported[prefix][name] = func
+
+    for (alias,target) in char.export_alias.items():
+      self.exported[alias] = self.exported[target]
+
+    for (alias,target) in char.export_sub_alias.items():
+      for prefix in char.export_prefix:
+        self.exported[prefix][alias] = self.exported[prefix][target]
 
   def unplug(self):
     self.char = None

@@ -16,6 +16,7 @@
 #get ac,ff,touch
 #> 17,14,13
 
+# TODO: change backend stats to start with "_"
 # TODO: set should raise exception not return a boolean
 # TODO: conditional bonuses
 # TODO: consider another way for set_stat() to interact with plug/unplug?
@@ -44,18 +45,52 @@ class Character(object):
 
   def __init__(self):
 
-    self.stats = OrderedDict()
-    self.bonuses = OrderedDict()
-    self.effects = OrderedDict()
-    self.items = OrderedDict()
-    self.abilities = OrderedDict()
-    self.events = OrderedDict()
+    self.stat = OrderedDict(); self.stats = self.stat
+    self.bonus = OrderedDict(); self.bonuses = self.bonus
+    self.effect = OrderedDict(); self.effects = self.effect
+    self.item = OrderedDict(); self.items = self.item
+    self.ability = OrderedDict(); self.abilities = self.ability
+    self.event = OrderedDict(); self.events = self.event
+    self.note = OrderedDict(); self.notes = self.note
+
+    self.letters = OrderedDict([
+      ('s','stat'),
+      ('b','bonus'),
+      ('e','effect'),
+      ('i','item'),
+      ('a','ability'),
+      ('v','event'),
+      ('n','note')])
+
+    self.export = ['search','on','off','revert','get','all']
+    self.export_prefix = ['add','set','del']
+    self.export_alias = {
+      '?':'search','+':'on','-':'off','r':'revert','g':'get','l':'all',
+      'a':'add','s':'set','d':'del'
+    }
+    self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sb'} # TODO
+
     self.setup()
 
-    self.export = ['on','off','revert']
-    self.export_prefix = ['add','get','set','del']
+  def search(self,name):
+    matches = []
+    for (l,d) in self.letters.items():
+      for (n,obj) in getattr(self,d).items():
+        if name in n:
+          matches.append('%s | %s' % (l,obj))
+    return '\n'.join(matches)
 
-  def stat(self,stat):
+  def get(self,typ,name):
+    typ = typ if typ not in self.letters else self.letters[typ]
+    if not isinstance(name,list):
+      name = [name]
+    return '\n'.join([str(getattr(self,typ)[n]) for n in name])
+
+  def all(self,typ,name):
+    typ = typ if typ not in self.letters else self.letters[typ]
+    return getattr(self,typ)[name].str_all()
+
+  def _add_stat(self,stat):
     if stat.name in self.stats:
       raise ValueError('Stat "%s" already exists' % stat.name)
     self.stats[stat.name] = stat
@@ -63,10 +98,7 @@ class Character(object):
   def add_stat(self,name,formula='0',text='',updated=None):
     stat = Stat(name,formula,text,updated)
     stat.plug(self)
-    self.stat(stat)
-
-  def get_stat(self,name):
-    return self.stats[name]
+    self._add_stat(stat)
 
   def del_stat(self,name):
     stat = self.stats[name]
@@ -93,18 +125,15 @@ class Character(object):
       return False
     return True
 
-  def bonus(self,bonus):
+  def _add_bonus(self,bonus):
     if bonus.name in self.bonuses:
       raise ValueError('Bonus "%s" already exists' % bonus.name)
     self.bonuses[bonus.name] = bonus
 
-  def add_bonus(self,name,value,stats,text=None,active=True,typ=None):
-    bonus = Bonus(name,int(value),stats,text,active,typ)
-    self.bonus(bonus)
+  def add_bonus(self,name,value,stats,typ=None,text=None,active=True):
+    bonus = Bonus(name,int(value),stats,typ,text,active)
+    self._add_bonus(bonus)
     bonus.plug(self)
-
-  def get_bonus(self,name):
-    return self.bonuses[name]
 
   def set_bonus(self,name,value):
     bonus = self.bonuses[name]
@@ -250,6 +279,20 @@ class Stat(object):
   def __str__(self):
     return '%s = %s' % (self.name,self.value)
 
+  def str_all(self):
+
+    l =     ['  value | %s' % self.value]
+    l.append('formula | '+self.original)
+    x = []
+    for typ in self.bonuses.values():
+      x +=  ['  bonus | %s' % b for b in typ]
+    l.extend(sorted(x))
+    l.append(' normal | %s' % self.normal)
+    l.append('   uses | '+','.join(sorted(self.uses)))
+    l.append('used by | '+','.join(sorted(self.usedby)))
+    l.append('   text | '+self.text)
+    return '\n'.join(l)
+
 class Bonus(object):
 
   TYPES = ('alchemical','armor','circumstance','competence','defelction',
@@ -261,7 +304,7 @@ class Bonus(object):
   def stacks(typ):
     return typ in ('none','dodge','circumstance','racial','penalty')
 
-  def __init__(self,name,value,stats,text=None,active=True,typ=None):
+  def __init__(self,name,value,stats,typ=None,text=None,active=True):
 
     self.name = name
     self.value = value
@@ -320,7 +363,20 @@ class Bonus(object):
     self.calc()
 
   def __str__(self):
-    return '%s + %s' % (self.name,self.value)
+
+    act = '-+'[self.active]
+    sign = '+' if self.value>=0 else ''
+    return '%s %s %s%s (%s)' % (act,self.name,sign,self.value,self.typ)
+
+  def str_all(self):
+
+    l =     ['  value | %s' % self.value]
+    l.append(' active | %s' % self.active)
+    l.append('   type | '+self.typ)
+    l.append(' revert | '+('change','same')[self.last==self.active])
+    l.append('  stats | '+','.join(sorted(self.stats)))
+    l.append('   text | '+self.text)
+    return '\n'.join(l)
 
 class Effect(object):
 

@@ -28,7 +28,7 @@
 #   type | armor
 # revert | change
 #  stats | ac_armor
-#   text | 
+#   text |
 #
 # ===== PLANNED FOR THE FUTURE =====
 #
@@ -94,6 +94,9 @@ def main(fname):
       print 'use Ctrl+D / EOF to exit'
       pass
 
+class ArgsError(Exception):
+  pass
+
 class Prompt(object):
 
   def __init__(self,func):
@@ -156,6 +159,18 @@ class CLI(cmd.Cmd):
     if self.overwrite():
       return True
 
+  def do_help(self,args):
+    if args and args[0] in self.exported:
+      func = self.exported[args[0]]
+      if isinstance(func,dict):
+        if len(args)<2 or args[1] not in func:
+          print '*** Unknown or missing sub-command'
+          return
+        func = func[args[1]]
+      print self.get_sig(func)[0]
+    else:
+      cmd.Cmd.do_help(self,' '.join(args))
+
   def overwrite(self):
     if self.char is None or not self.modified:
       return True
@@ -175,6 +190,7 @@ class CLI(cmd.Cmd):
           (func,args) = (val[args[1]],args[2:])
         else:
           print 'Unknown sub-command "%s"' % args[1]
+          return
       else:
         (func,args) = (val,args[1:])
     else:
@@ -182,6 +198,7 @@ class CLI(cmd.Cmd):
       return
 
     try:
+      self.check_args(func,args)
       result = func(*args)
     except:
       print '*** '+traceback.format_exc().split('\n')[-2]
@@ -189,9 +206,29 @@ class CLI(cmd.Cmd):
     if result:
       print result
 
+  def check_args(self,func,user_args):
+    (sig,args,kwargs) = self.get_sig(func)
+    if len(user_args)<len(args) or len(user_args)>len(args+kwargs):
+      raise ArgsError(sig)
+
+  def get_sig(self,func):
+    (args,varargs,keywords,defaults) = inspect.getargspec(func)
+    args.remove('self')
+    split = -len(defaults) if defaults else 0
+    kwargs = args[split:] if split else []
+    args = args[:split] if split else args
+
+    name = func.__name__.replace('_',' ')
+    opts = ['[%s]' % s for s in kwargs]
+    space = ' ' if opts else ''
+    sig = '(%s) %s%s%s' % (name,' '.join(args),space,' '.join(opts))
+
+    return (sig,args,kwargs)
+
   def plug(self,char):
     self.unplug()
     self.char = char
+
     self.exported = {name:getattr(char,name) for name in char.export}
 
     funcs = inspect.getmembers(char,inspect.ismethod)

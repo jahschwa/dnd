@@ -21,6 +21,7 @@
 # TODO: conditional bonuses
 # TODO: consider another way for set_stat() to interact with plug/unplug?
 # TODO: decide what goes in here and what goes in the CLI
+# TODO: Bonus subclasses Stat but only allows root nodes? allows formulas
 
 # Stat
 # Bonus
@@ -447,6 +448,14 @@ class Pathfinder(Character):
 
   ])
 
+  BONUSES = ('alchemical','armor','circumstance','competence','defelction',
+      'dodge','enhancement','inherent','insight','luck','morale',
+      'natural_armor','profane','racial','resistance','sacred','shield',
+      'size','trait','penalty','none')
+
+  AC_BONUS = {'armor':'ac_armor','deflection':'ac_deflect','dodge':'ac_dex',
+      'natural_armor':'ac_nat','shield':'ac_shield','size':'ac_size'}
+
   # TODO: conditional jump modifier based on move speed
   # TODO: craft, profession, perform
   # TODO: class skills
@@ -458,8 +467,11 @@ class Pathfinder(Character):
   def ranks(self):
     raise NotImplementedError
 
-  def bonus_ac(self,name,value,typ,text=None,active=True):
-    raise NotImplementedError
+  # override to be smart about AC bonuses
+  def add_bonus(self,name,value,stats,typ=None,text=None,active=True):
+    if stats.lower()=='ac':
+      stats = self.AC_BONUS.get(typ,'ac_misc')
+    super(Pathfinder,self).add_bonus(name,value,stats,typ,text,active)
 
 ###############################################################################
 

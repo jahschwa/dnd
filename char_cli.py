@@ -186,7 +186,10 @@ class CLI(cmd.Cmd):
     if args[0] in self.exported:
       val = self.exported[args[0]]
       if isinstance(val,dict):
-        if args[1] in val:
+        if len(args)<2:
+          print 'Missing sub-ommand'
+          return
+        elif args[1] in val:
           (func,args) = (val[args[1]],args[2:])
         else:
           print 'Unknown sub-command "%s"' % args[1]
@@ -258,6 +261,9 @@ class CLI(cmd.Cmd):
     self.modified = True
 
   def do_load(self,args):
+    if not args:
+      print 'Missing file name'
+      return
     if not self.overwrite():
       return
     if not os.path.isfile(args[0]):

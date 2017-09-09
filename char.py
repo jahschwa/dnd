@@ -46,6 +46,9 @@ class DependencyError(Exception):
 class FormulaError(Exception):
   pass
 
+class ProtectedError(Exception):
+  pass
+
 class Character(object):
 
   STATS = {}
@@ -144,12 +147,18 @@ class Character(object):
 
   # @raise KeyError if name does not exist
   # @raise FormulaError if formula contains errors
-  def set_stat(self,name,formula=None,text=None,updated=None):
+  def set_stat(self,name,formula=None,text=None,updated=None,force=False):
 
     try:
       old = self.stats[name]
     except KeyError:
       raise KeyError('unknown stat "%s"' % name)
+
+    if not force:
+      if old.protected:
+        raise ProtectedError('stat "%s" is protected (use force)' % name)
+      if old.uses:
+        raise ProtectedError('stat "%s" is not a root (use force)' % name)
 
     new = old.copy(text=text,formula=formula,updated=updated)
     new.usedby = set(old.usedby)
@@ -235,7 +244,8 @@ class Stat(object):
       '#':'self.char.stats["%s"].normal',
   }
 
-  def __init__(self,name,formula='0',text='',bonuses=None,updated=None):
+  def __init__(self,name,formula='0',text='',bonuses=None,protected=None,
+      updated=None):
 
     self.char = None
     self.name = name
@@ -243,6 +253,7 @@ class Stat(object):
     self.formula = str(formula)
     self.original = self.formula
     self.bonuses = bonuses or {}
+    self.protected = name.startswith('_') if protected is None else protected
     self.updated = time.time() if updated is None else updated
 
     self.uses = set()
@@ -262,15 +273,17 @@ class Stat(object):
     usedby = set()
     for name in char.stats:
       for (var,expand) in self.VARS.items():
-        if var+name in s:
-          s = s.replace(var+name,expand % name)
+        orig = s
+        s = s.replace(var+name,expand % name)
+        s = s.replace('%s{%s}' % (var,name),expand % name)
+        if s!=orig:
           self.uses.add(name)
           self.leaf = False
           usedby.add(char.stats[name])
 
     for name in dir(self):
-      if '@'+name in s:
-        s = s.replace('@'+name,'self.'+name)
+      s = s.replace('@'+name,'self.'+name)
+      s = s.replace('@{'+name+'}','self.'+name)
 
     try:
       eval(s)
@@ -368,8 +381,10 @@ class Stat(object):
     return self.__class__(name,formula,text,bonuses,updated,**k)
 
   def __str__(self):
-    typ = 'r' if self.root else ('l' if self.leaf else '-')
-    return '%s %3s %s' % (typ,self.value,self.name)
+
+    root = '-r'[self.root]
+    leaf = '-l'[self.leaf]
+    return '%s%s %3s %s' % (root,leaf,self.value,self.name)
 
   def __repr__(self):
     return '<%s %s>' % (self.__class__.__name__,self.name)
@@ -701,8 +716,8 @@ class PathfinderSkill(Stat):
     super(PathfinderSkill,self).__init__(*args,**kwargs)
 
     f = '+@ranks+(3 if @class_skill and @ranks else 0)'
-    if 'dex' in self.uses or 'str' in self.uses:
-      f += '+$acp'
+    if '$dex' in self.original or '$str' in self.original:
+      f += '+${acp}'
     self.set_formula(self.formula+f)
 
     self.COPY += ['ranks','class_skill']
@@ -731,7 +746,7 @@ class PathfinderSkill(Stat):
 
     cs = '-c'[self.class_skill]
     tr = '-t'[self.ranks>0]
-    return '%s%s %2s %s' % (cs,tr,self.value,self.name)
+    return '%s%s %3s %s' % (cs,tr,self.value,self.name)
 
   def str_all(self):
 

@@ -24,6 +24,7 @@
 # TODO: Bonus subclasses Stat but only allows root nodes? allows formulas
 # TODO: stat classes for setting (and getting?) e.g. abilities, skills
 # TODO: mark skills that can only be used if trained somehow?
+# TODO: common effect library for importing: feats, spells, conditions
 
 # Stat
 #   PathfinderSkill
@@ -97,7 +98,10 @@ class Character(object):
     typ = typ if typ not in self.letters else self.letters[typ]
     if typ not in self.letters.values():
       raise KeyError('unknown type "%s"' % typ)
-    if not isinstance(name,list):
+
+    if name=='*':
+      name = sorted(getattr(self,typ).keys())
+    elif not isinstance(name,list):
       name = [name]
 
     results = []
@@ -364,6 +368,7 @@ class Stat(object):
 
   def del_bonus(self,bonus):
 
+    typ = bonus.typ
     self.bonuses[typ] = [b for b in self.bonuses[typ] if b is not bonus]
     if not self.bonuses[typ]:
       del self.bonuses[typ]
@@ -614,7 +619,7 @@ class Pathfinder(Character):
   def __init__(self):
 
     super(Pathfinder,self).__init__()
-    self.export += ['skill','wizard']
+    self.export += ['dmg','heal','health','skill','wizard']
 
   def setup(self):
 
@@ -623,8 +628,72 @@ class Pathfinder(Character):
       skill = PathfinderSkill(name,formula)
       self._add_stat(skill)
 
-  def damage(self,dmg,nonlethal=False):
-    raise NotImplementedError
+  def dmg(self,damage,nonlethal=False):
+
+    damage = int(damage)
+    if damage<=0:
+      raise ValueError('damage must be > 0')
+
+    if nonlethal:
+      self.set_stat('nonlethal',self.stats['nonlethal'].value+damage)
+    else:
+      if '_damage' in self.bonuses:
+        self.set_bonus('_damage',self.bonuses['_damage'].value-damage)
+      else:
+        self.add_bonus('_damage',-damage,'hp')
+      if damage>=50 and damage>=int(self._max_hp()/2):
+        print '!!! Massive damage'
+
+    self.health()
+
+  def heal(self,damage):
+
+    damage = int(damage)
+    if damage<=0:
+      raise ValueError('healing must be > 0')
+
+    nonlethal = min(damage,self.stats['nonlethal'].value)
+    try:
+      current = -self.bonuses['_damage'].value
+    except KeyError:
+      current = 0
+    damage = min(damage,current)
+
+    if '_damage' in self.bonuses and damage:
+      self.set_bonus('_damage',self.bonuses['_damage'].value+damage)
+      if self.bonuses['_damage'].value==0:
+        self.del_bonus('_damage')
+    if nonlethal:
+      self.set_stat('nonlethal',self.stats['nonlethal'].value-nonlethal)
+
+    self.health()
+
+  def health(self):
+
+    current = self.stats['hp'].value
+    max_hp = self._max_hp()
+    nonlethal = self.stats['nonlethal'].value
+    death = -self.stats['constitution'].value
+
+    status = 'up'
+    if current<=death:
+      status = 'DEAD'
+    elif current<0:
+      status = 'DYING'
+    elif current==0:
+      status = 'STAGGERED'
+    elif nonlethal>=current:
+      status = 'UNCON'
+
+    print ('HP: %s/%s   Nonlethal: %s   Death: %s   Status: %s'
+        % (current,max_hp,nonlethal,death,status))
+
+  def _max_hp(self):
+
+    hp = self.stats['hp'].value
+    if '_damage' not in self.bonuses:
+      return hp
+    return hp-self.bonuses['_damage'].value
 
   def skill(self,action='info',name=None,value=0):
 
@@ -678,7 +747,7 @@ class Pathfinder(Character):
 
   def wizard(self,action='help'):
 
-    actions = ['class_skill']
+    actions = ['class_skill','skill']
     if action not in actions and action not in ('help','all'):
       raise ValueError('invalid sub-command "%s"' % action)
 
@@ -700,6 +769,28 @@ class Pathfinder(Character):
     for (i,x) in enumerate(self.CLASS_SKILLS[clas]):
       if x=='1':
         self.stat[names[i]].set_cskill()
+
+  def wiz_skill(self):
+
+    done = False
+    for skill in self.SKILLS:
+      success = False
+      while not success:
+        try:
+          value = raw_input('%s ranks = ' % skill)
+          if value=='':
+            value = 0
+          elif value=='exit':
+            done = True
+            break
+          else:
+            value = int(value)
+          self.stats[skill].set_ranks(value)
+          success = True
+        except Exception as e:
+          print '*** %s: %s' % (e.__class__.__name__,e.message)
+      if done:
+        break
 
   def wiz_race(self):
 

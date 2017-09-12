@@ -78,6 +78,7 @@
 # [TODO] consider managing multiple characters
 # [TODO] better exception messages, especially for num args
 # [TODO] dice roller
+# [TODO] custom aliases?
 
 import sys,os,pickle,cmd,inspect,traceback
 
@@ -131,6 +132,44 @@ class CLI(cmd.Cmd):
     """[DEV] print traceback for last exception"""
 
     print self.last_trace
+
+  def do_old_load(self,args):
+
+    if not args:
+      print 'Missing file name'
+      return
+    if not self.overwrite():
+      return
+    if not os.path.isfile(args[0]):
+      print 'Unable to read "%s"' % args[0]
+      return
+    try:
+      with open(args[0],'rb') as f:
+        self.plug(pickle.load(f))
+        self.fname = args[0]
+        self.modified = False
+    except Exception:
+      print 'Unable to unpickle "%s"' % args[0]
+
+  def do_old_save(self,args):
+
+    fname = self.fname if not args else ' '.join(args)
+    if not fname:
+      fname = raw_input('Enter a file name: ')
+    try:
+      with open(fname,'a') as f:
+        pass
+    except:
+      print 'Unable to write "%s"' % fname
+      return
+    try:
+      with open(fname,'wb') as f:
+        pickle.dump(self.char,f,-1)
+      self.fname = fname
+      self.modified = False
+      return False
+    except:
+      print 'Unable to pickle character'
 
 ############################ </DEV>
 
@@ -188,14 +227,56 @@ class CLI(cmd.Cmd):
     else:
       cmd.Cmd.do_help(self,' '.join(args))
 
+  def do_load(self,args):
+
+    if not args:
+      print 'Missing file name'
+    elif not self.overwrite():
+      return
+    elif not os.path.isfile(args[0]):
+      print 'Unable to read "%s"' % args[0]
+    else:
+      (c,errors) = char.Character.load(args[0])
+      if errors:
+        print 'Failed to load "%s"' % args[0]
+        print '\n'.join(errors)
+      else:
+        self.unplug()
+        self.plug(c)
+        self.fname = args[0]
+        self.modified = False
+
+  def do_save(self,args):
+
+    fname = self.fname if not args else ' '.join(args)
+    if not fname:
+      fname = raw_input('Enter a file name: ')
+    try:
+      with open(fname,'a') as f:
+        pass
+    except:
+      print 'Unable to write to "%s"' % fname
+      return
+
+    self.char.save(fname)
+    self.fname = fname
+    self.modified = False
+
+  def do_close(self,args):
+
+    if not self.char:
+      return
+    if self.overwrite():
+      self.unplug()
+
   def overwrite(self):
 
     if self.char is None or not self.modified:
       return True
     choice = raw_input('\nSave changes to current char? (Y/n/c): ').lower()
-    if choice in ('y','yes'):
+    if choice in ('','y','yes'):
       return self.do_save([])==False
-    if choice in ('n','no','cancel'):
+    if choice in ('n','no'):
       return True
     return False
 
@@ -285,44 +366,6 @@ class CLI(cmd.Cmd):
     args = args[0] if args else 'Pathfinder'
     self.plug(eval('char.%s()' % args))
     self.modified = True
-
-  def do_load(self,args):
-
-    if not args:
-      print 'Missing file name'
-      return
-    if not self.overwrite():
-      return
-    if not os.path.isfile(args[0]):
-      print 'Unable to read "%s"' % args[0]
-      return
-    try:
-      with open(args[0],'rb') as f:
-        self.plug(pickle.load(f))
-        self.fname = args[0]
-        self.modified = False
-    except Exception:
-      print 'Unable to unpickle "%s"' % args[0]
-
-  def do_save(self,args):
-
-    fname = self.fname if not args else ' '.join(args)
-    if not fname:
-      fname = raw_input('Enter a file name: ')
-    try:
-      with open(fname,'a') as f:
-        pass
-    except:
-      print 'Unable to write "%s"' % fname
-      return
-    try:
-      with open(fname,'wb') as f:
-        pickle.dump(self.char,f,-1)
-      self.fname = fname
-      self.modified = False
-      return False
-    except:
-      print 'Unable to pickle character'
 
 if __name__=='__main__':
 

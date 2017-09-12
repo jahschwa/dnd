@@ -38,8 +38,11 @@
 # Event
 # Text
 
-import time
+import time,inspect
 from collections import OrderedDict
+
+class DuplicateError(Exception):
+  pass
 
 class DependencyError(Exception):
   pass
@@ -50,11 +53,16 @@ class FormulaError(Exception):
 class ProtectedError(Exception):
   pass
 
+class Universe(object):
+  def __contains__(self,obj):
+    return True
+
 class Character(object):
 
   STATS = {}
+  BONUSES = Universe()
 
-  def __init__(self):
+  def __init__(self,setup=True):
 
     self.stat = OrderedDict(); self.stats = self.stat
     self.bonus = OrderedDict(); self.bonuses = self.bonus
@@ -81,7 +89,61 @@ class Character(object):
     }
     self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sb'} # TODO
 
-    self.setup()
+    if setup:
+      self.setup()
+
+  def save(self,name):
+
+    s = self.__class__.__name__+'\n'
+    for typ in self.letters.values():
+      for obj in getattr(self,typ).values():
+        s += ('%s\t' % obj.__class__.__name__)+'\t'.join(obj.save())+'\n'
+
+    with open(name,'w') as f:
+      f.write(s)
+
+  @staticmethod
+  def load(name):
+
+    with open(name,'r') as f:
+      lines = [x.strip() for x in f.readlines()]
+
+    errors = []
+    chars = {k:v for (k,v) in globals().items()
+        if inspect.isclass(v) and issubclass(v,Character)}
+    fields = {k:v for (k,v) in globals().items()
+        if inspect.isclass(v) and issubclass(v,Field)}
+
+    char = None
+    for (i,line) in enumerate(lines):
+      if not line:
+        continue
+      if not char:
+        if line not in chars:
+          return ['line %s | unknown character type "%s"' % (i+1,line[0])]
+        char = chars[line](setup=False)
+      else:
+        line = line.split('\t')
+        if line[0] not in fields:
+          errors.append('line %s | unknown object type "%s"' % (i+1,line[0]))
+          continue
+        try:
+          obj = fields[line[0]].load(line[1:])
+          if not errors:
+            char._get_add_method(obj.__class__)(obj)
+        except Exception as e:
+          errors.append('line %s |   %s' % (i,' / '.join(line)))
+          errors.append('*** %s: %s' % (e.__class__.__name__,e.message))
+
+    return (char,errors)
+
+  def _get_add_method(self,cls):
+
+    if cls.__name__.lower() in self.letters.values():
+      return getattr(self,'_add_'+cls.__name__.lower())
+    if cls.__bases__:
+      return self._get_add_method(cls.__bases__[0])
+    raise KeyError('failed to get add method')
 
   def search(self,name,ignore='_'):
 
@@ -242,7 +304,45 @@ class Character(object):
     for (name,formula) in self.STATS.items():
       self.add_stat(name,str(formula))
 
-class Stat(object):
+class Field(object):
+
+  FIELDS = {}
+
+  def save(self):
+
+    result = []
+    for (field,typ) in self.FIELDS.items():
+      if typ is None:
+        continue
+      val = getattr(self,field)
+      if isinstance(val,list):
+        result.append(','.join([str(x) for x in val]))
+      else:
+        result.append(str(val))
+    return result
+
+  @classmethod
+  def load(cls,fields):
+
+    parsed = []
+    i = 0
+    for typ in cls.FIELDS.values():
+      val = None
+      if typ is not None:
+        if typ is list:
+          val = fields[i].split(',')
+        elif typ is bool:
+          val = fields[i]=='True'
+        else:
+          val = typ(fields[i])
+        i += 1
+      parsed.append(val)
+    return cls(*parsed)
+
+class Stat(Field):
+
+  FIELDS = OrderedDict([('name',str),('original',str),('text',str),
+      ('bonuses',None),('protected',bool),('updated',float)])
 
   VARS = {'$':'self.char.stats["%s"].value',
       '#':'self.char.stats["%s"].normal',
@@ -408,7 +508,10 @@ class Stat(object):
     l.append('   text | '+self.text)
     return '\n'.join(l)
 
-class Bonus(object):
+class Bonus(Field):
+
+  FIELDS = OrderedDict([('name',str),('value',int),('stats',list),
+      ('typ',str),('text',str),('active',bool)])
 
   @staticmethod
   def stacks(typ):
@@ -616,9 +719,9 @@ class Pathfinder(Character):
   # TODO: class skills
   # TODO: max_dex
 
-  def __init__(self):
+  def __init__(self,*args,**kwargs):
 
-    super(Pathfinder,self).__init__()
+    super(Pathfinder,self).__init__(*args,**kwargs)
     self.export += ['dmg','heal','health','skill','wizard']
 
   def setup(self):

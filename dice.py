@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
 import random
+from functools import total_ordering
 
+@total_ordering
 class Dice(object):
 
   @staticmethod
   def parse(s):
 
     if not reduce(lambda a,b: a and (b.isdigit() or b in 'd+-'),s,True):
-      raise ValueError('Invalid characters in "%s"' % s)
+      raise ValueError('invalid Dice string "%s"' % s)
 
     s = s.lower().replace('-','+-')
     fields = [x.strip() for x in s.split('+')]
@@ -19,7 +21,7 @@ class Dice(object):
         continue
       if 'd' in field:
         (num,sides) = field.split('d')
-        num = int(num) or 1
+        num = int(num or 1) or 1
         sides = int(sides)
         Dice.dict_add(dice,sides,num)
       else:
@@ -36,6 +38,7 @@ class Dice(object):
 
   @staticmethod
   def intify(x):
+
     if x==int(x):
       return int(x)
     else:
@@ -65,8 +68,45 @@ class Dice(object):
 
     if isinstance(obj,int):
       return self.__add_int(-obj)
+    elif isinstance(obj,Dice):
+      return self.__add_dice(obj.neg())
+
+  def __rsub__(self,obj):
+
+    if isinstance(obj,int):
+      return self.neg().__add_int(obj)
     else:
       return NotImplemented
+
+  def __eq__(self,other):
+
+    if isinstance(other,Dice):
+      return self.avg()==other.avg()
+    elif isinstance(other,int):
+      return self.avg()==other
+
+  def __lt__(self,other):
+
+    if isinstance(other,Dice):
+      return self.avg()<other.avg()
+    elif isinstance(other,int):
+      return self.avg()<other
+
+  def neg(self):
+
+    new = self.copy()
+    new.bonus *= -1
+    for sides in new.dice:
+      new.dice[sides] *= -1
+    return new
+
+  def same(self,other):
+
+    if not isinstance(other,Dice):
+      raise TypeError('invalid type %s for Dice.same()'
+          % other.__class__.__name__)
+
+    return str(self)==str(other)
 
   def copy(self):
 
@@ -93,13 +133,16 @@ class Dice(object):
 
     total = 0
     for (sides,num) in self.dice.items():
-      for i in range(0,num):
-        total += random.randint(1,sides)
+      neg = [1,-1][num<0]
+      for i in range(0,num,neg):
+        total += random.randint(1,sides)*neg
     return Dice.intify(total+self.bonus)
 
   def min(self):
 
-    return sum(self.dice.values())+self.bonus
+    pos = [n for n in self.dice.values() if n>0]
+    neg = [n*s for (s,n) in self.dice.items() if n<0]
+    return sum(pos)+sum(neg)+self.bonus
 
   def avg(self):
 
@@ -110,15 +153,22 @@ class Dice(object):
 
   def max(self):
 
-    return sum([sides*num for (sides,num) in self.dice.items()])+self.bonus
+    pos = [n*s for (s,n) in self.dice.items() if n>0]
+    neg = [n for n in self.dice.values() if n<0] 
+    return sum(pos)+sum(neg)+self.bonus
 
   def stats(self):
 
-    return self__str__()+' = %s/%s/%s' % (self.min(),self.avg(),self.max())
+    return self.__str__()+' = %s/%s/%s' % (self.min(),self.avg(),self.max())
 
   def __str__(self):
 
-    s = '+'.join(['%sd%s'%(self.dice[k],k) for k in sorted(self.dice.keys())])
+    sides = sorted(self.dice.items(),key=lambda x:x[1]*(x[0]+1)/2.0,reverse=True)
+    s = '+'.join(['%sd%s' % (n,s) for (s,n) in sides]).replace('+-','-')
     if self.bonus:
       s += '%s%s' % ('+' if self.bonus>0 else '',self.bonus)
+    if s.startswith('+'):
+      return s[1:]
     return s
+
+  __repr__ = __str__

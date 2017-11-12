@@ -30,6 +30,7 @@
 #   PathfinderSkill
 # Bonus
 # Effect
+# Duration
 # Item
 #   Weapon
 #   Armor
@@ -40,6 +41,8 @@
 
 import time,inspect
 from collections import OrderedDict
+
+from dice import Dice
 
 class DuplicateError(Exception):
   pass
@@ -251,7 +254,7 @@ class Character(object):
   # @raise ValueError if name already exists
   def add_bonus(self,name,value,stats,typ=None,text=None,active=True):
 
-    bonus = Bonus(name,int(value),stats,typ,text,active)
+    bonus = Bonus(name,Dice(value),stats,typ,text,active)
     self._add_bonus(bonus)
 
   # @raise KeyError if name does not exist
@@ -262,7 +265,7 @@ class Character(object):
     except KeyError:
       raise KeyError('unknown bonus "%s"' % name)
 
-    bonus.value = value
+    bonus.value = Dice(value)
     bonus.calc()
 
   # @raise KeyError if name does not exist
@@ -595,10 +598,118 @@ class Bonus(Field):
     l.append('   text | '+self.text)
     return '\n'.join(l)
 
+class Duration(object):
+
+  UNITS = {
+      ('','r','rd','rds','round','rounds') : 1,
+      ('m','mi','min','minute','minutes') : 10,
+      ('h','hr','hrs','hour','hours') : 600,
+      ('d','day','days') : 14400,
+      ('y','yr','yrs','year','years') : 5259600,
+      ('l','lvl','level') : '$level',
+      ('cl','clvl','caster','casterlvl','casterlevel') : '$caster_level'
+  }
+
+  NAMES = [(5259600,'yr'),(14400,'day'),(600,'hr'),(10,'min'),(1,'rd')]
+
+  @staticmethod
+  def is_int(s):
+
+    try:
+      int(s)
+      return True
+    except:
+      return False
+
+  @staticmethod
+  def get_mult(s):
+
+    for (names,mult) in Duration.UNITS.items():
+      if s in names:
+        return mult
+
+    raise KeyError('unknown unit "%s"' % s)
+
+  @staticmethod
+  def split_unit(s):
+
+    i = 0
+    while i<len(s) and Duration.is_int(s[i]):
+      i += 1
+    return (s[:i] or '1',s[i:])
+
+  @staticmethod
+  def to_rds(s):
+
+    durs = s.lower().replace(' ','').replace('_','').split('+')
+
+    rds = []
+    for dur in durs:
+
+      if dur.count('/')>1:
+        raise ValueError('too many / in "%s"' % dur)
+
+      dur = dur.split('/')
+      (num,unit) = Duration.split_unit(dur[0])
+      s = '%s*%s' % (num,Duration.get_mult(unit))
+
+      if len(dur)>1:
+        (num,stat) = Duration.split_unit(dur[1])
+        s += '*max(1,int(%s/%s))' % (Duration.get_mult(stat),num)
+
+      rds.append(s)
+
+    return '+'.join(rds)
+
+  @staticmethod
+  def parse(s,char):
+
+    s = Duration.to_rds(s)
+    for unit in Duration.UNITS.values():
+      if isinstance(unit,str) and unit[1:] in char.stats:
+        s = s.replace(unit,'char.stats["%s"].value' % unit[1:])
+    return eval(s)
+
+  def __init__(self,dur,char):
+
+    self.original = Duration.parse(dur,char)
+    self.rounds = self.original
+
+  def advance(self,dur):
+
+    if isinstance(dur,Duration):
+      dur = dur.rounds
+    elif not isinstance(dur,int):
+      raise TypeError('invalid type "%s"' % dur.__class__.__name__)
+
+    self.rounds = max(0,self.rounds-dur)
+    return self.expired()
+
+  def expired(self):
+
+    return self.rounds<=0
+
+  def reset(self):
+
+    self.rounds = self.original
+
+  def __str__(self):
+
+    s = []
+    x = self.rounds
+    for (num,name) in Duration.NAMES:
+      if num<x:
+        s.append('%s%s' % (x/num,name))
+        x = x%num
+    return '+'.join(s)
+
 class Effect(object):
 
-  def __init__(self):
-    raise NotImplementedError
+  def __init__(self,name,bonuses,duration):
+
+    self.name = name
+    self.bonuses = bonuses if isinstance(bonuses,list) else [bonuses]
+    self.duration = duration
 
 class Text(object):
 
@@ -618,7 +729,7 @@ class Pathfinder(Character):
 
   STATS = OrderedDict([
 
-  ('level',1),('hd','$level'),
+  ('level',1),('hd','$level'),('caster_level','$level'),
 
   ('strength',10),('dexterity',10),('constitution',10),
   ('intelligence',10),('wisdom',10),('charisma',10),

@@ -39,6 +39,7 @@
 #   PathfinderSkill
 # Bonus
 # Effect
+# Duration
 # Item
 #   Weapon
 #   Armor
@@ -49,6 +50,8 @@
 
 import time,inspect
 from collections import OrderedDict
+
+from dice import Dice
 
 class DuplicateError(Exception):
   pass
@@ -333,7 +336,7 @@ class Character(object):
   # @raise ValueError if name already exists
   def add_bonus(self,name,value,stats,typ=None,text=None,active=True):
 
-    bonus = Bonus(name,int(value),stats,typ,text,active)
+    bonus = Bonus(name,Dice(value),stats,typ,text,active)
     self._add_bonus(bonus)
 
   # @raise KeyError if name does not exist
@@ -344,7 +347,7 @@ class Character(object):
     except KeyError:
       raise KeyError('unknown bonus "%s"' % name)
 
-    bonus.value = int(value)
+    bonus.value = Dice(value)
     bonus.calc()
 
   # @raise KeyError if name does not exist
@@ -356,6 +359,32 @@ class Character(object):
       raise KeyError('unknown bonus "%s"' % name)
 
     del self.bonuses[name]
+
+  def _add_effect(self,effect):
+
+    if effect.name in self.effects:
+      raise ValueError('effect "%s" already exists' % effect.name)
+    effect.plug(self)
+    self.effects[effect.name] = effect
+
+  def add_effect(self,name,bonuses,duration=None,text=None,active=None):
+
+    effect = Effect(name,bonuses,Duration(duration,self),text,active)
+    self._add_effect(effect)
+
+  def set_effect(self,name,bonuses=None,duration=None):
+
+    effect = self.effects[name]
+    bonuses = bonuses or effect.bonuses
+    duration = duration or effect.rounds
+    try:
+      effect.unplug()
+      del self.effects[name]
+      self.add_effect(name,bonuses,duration,effect.text,effect.active)
+    except Exception as e:
+      effect.plug(self)
+      self.effects[name] = effect
+      raise e
 
   # @raise KeyError if name does not exist
   def on(self,name):
@@ -617,6 +646,7 @@ class Bonus(Field):
     self.typ = (typ or 'none').lower()
 
     self.char = None
+    self.usedby = set()
     self.last = active
 
   def plug(self,char):
@@ -652,8 +682,9 @@ class Bonus(Field):
   def on(self):
     self.toggle(True)
 
-  def off(self):
-    self.toggle(False)
+  def off(self,force=False):
+    if force or not reduce(self.usedby,lambda a,b:a or b.is_active(),False):
+      self.toggle(False)
 
   def toggle(self,new):
 
@@ -684,10 +715,219 @@ class Bonus(Field):
     l.append('   text | %s' % self.text)
     return '\n'.join(l)
 
+class Duration(object):
+
+  INF = -1
+  INF_NAMES = (None,'inf','infinity','infinite','perm','permanent','forever')
+
+  UNITS = {
+      ('','r','rd','rds','round','rounds') : 1,
+      ('m','mi','min','minute','minutes') : 10,
+      ('h','hr','hrs','hour','hours') : 600,
+      ('d','day','days') : 14400,
+      ('y','yr','yrs','year','years') : 5259600,
+      ('l','lvl','level') : '$level',
+      ('cl','clvl','caster','casterlvl','casterlevel') : '$caster_level'
+  }
+
+  NAMES = [(5259600,'yr'),(14400,'day'),(600,'hr'),(10,'min'),(1,'rd')]
+
+  @staticmethod
+  def is_int(s):
+
+    try:
+      int(s)
+      return True
+    except:
+      return False
+
+  @staticmethod
+  def get_mult(s):
+
+    for (names,mult) in Duration.UNITS.items():
+      if s in names:
+        return mult
+
+    raise KeyError('unknown unit "%s"' % s)
+
+  @staticmethod
+  def split_unit(s):
+
+    i = 0
+    while i<len(s) and Duration.is_int(s[i]):
+      i += 1
+    return (s[:i] or '1',s[i:])
+
+  @staticmethod
+  def to_rds(s):
+
+    if isinstance(s,int):
+      return str(s)
+
+    if isinstance(s,str):
+      s = s.lower().replace(' ','').replace('_','')
+    if s in Duration.INF_NAMES:
+      return str(Duration.INF)
+
+    durs = s.split('+')
+
+    rds = []
+    for dur in durs:
+
+      if dur.count('/')>1:
+        raise ValueError('too many / in "%s"' % dur)
+
+      dur = dur.split('/')
+      (num,unit) = Duration.split_unit(dur[0])
+      s = '%s*%s' % (num,Duration.get_mult(unit))
+
+      if len(dur)>1:
+        (num,stat) = Duration.split_unit(dur[1])
+        s += '*max(1,int(%s/%s))' % (Duration.get_mult(stat),num)
+
+      rds.append(s)
+
+    return '+'.join(rds)
+
+  @staticmethod
+  def parse(s,char):
+
+    s = Duration.to_rds(s)
+    for unit in Duration.UNITS.values():
+      if isinstance(unit,str) and unit.startswith('$'):
+        s = s.replace(unit,'char.stats["%s"].value' % unit[1:])
+    if 'char.stats' in s and not char:
+      raise ValueError('string references Stats but missing Character')
+    return eval(s)
+
+  def __init__(self,dur=None,char=None):
+
+    self.original = Duration.parse(dur,char)
+    self.rounds = self.original
+
+  def advance(self,dur=1):
+
+    if isinstance(dur,Duration):
+      dur = dur.rounds
+    elif not isinstance(dur,int):
+      raise TypeError('invalid type "%s"' % dur.__class__.__name__)
+
+    if self.rounds==Duration.INF:
+      return False
+    self.rounds = max(0,self.rounds-dur)
+    return self.expired()
+
+  def expired(self):
+
+    return self.rounds==0
+
+  def reset(self):
+
+    self.rounds = self.original
+
+  def __str__(self):
+
+    if self.rounds==Duration.INF:
+      return 'infinite'
+
+    s = []
+    x = self.rounds
+    for (num,name) in Duration.NAMES:
+      if num<x:
+        s.append('%s%s' % (x/num,name))
+        x = x%num
+    return '+'.join(s)
+
 class Effect(object):
 
-  def __init__(self):
-    raise NotImplementedError
+  def __init__(self,name,bonuses,duration=None,text=None,active=None):
+
+    self.name = name
+    self.bonuses = bonuses if isinstance(bonuses,list) else [bonuses]
+    self.duration = duration or Duration()
+    self.text = text
+    self.active = active
+
+    self.last = active
+    self.char = None
+
+    if not isinstance(self.duration,Duration):
+      raise TypeError('duration must be Duration not "%s"'
+          % self.duration.__class__.__name__)
+
+  def plug(self,char):
+
+    for name in self.bonuses:
+      bonus = char.bonuses[name]
+      bonus.usedby.add(self.name)
+      if self.active is not None:
+        if self.active:
+          bonus.on()
+        else:
+          bonus.off()
+    self.char = char
+
+  def unplug(self):
+
+    if not self.char:
+      raise RuntimeError('plug() must be called before unplug()')
+
+    for name in self.bonuses:
+      bonus = char.bonuses[name]
+      bonus.usedby.remove(self.name)
+      bonus.off()
+    self.char = None
+
+  def is_active(self):
+
+    if self.active is not None:
+      return self.active
+    return self.duration.rounds!=0
+
+  def on(self):
+    self.toggle(True)
+
+  def off(self):
+    self.toggle(False)
+
+  def toggle(self,new):
+
+    self.last = self.active
+    self.active = new
+    for name in self.bonuses:
+      self.char.bonuses[name].toggle(new)
+
+  def revert(self):
+
+    self.active = self.last
+    for name in self.bonuses:
+      self.char.bonuses[name].revert()
+
+  def __str__(self):
+
+    actives = [b.active for b in self.bonuses]
+    if all(actives):
+      act = '+'
+    elif any(actives):
+      act = '?'
+    else:
+      act = '-'
+    names = [b.name for b in self.bonuses]
+    return '%s %s %s (%s)' % (act,self.name,self.duration,','.join(names))
+
+  def str_all(self):
+
+    s = str(self)
+
+    l =     ['duration | %s' % self.duration]
+    l.extend([' bonuses | %s' % b for b in self.bonuses])
+    l.append('  active | %s/%s (init: %s)' % (
+        len([b for b in self.bonuses if b.active]),
+        len(self.bonuses),
+        {True:'+',False:'-',None:'='}[self.active]
+    ))
+    l.append('    text | '+self.text)
+    return '\n'.join(l)
 
 class Text(object):
 
@@ -707,7 +947,7 @@ class Pathfinder(Character):
 
   STATS = OrderedDict([
 
-  ('level',1),('hd','$level'),
+  ('level',1),('hd','$level'),('caster_level','$level'),
 
   ('strength',10),('dexterity',10),('constitution',10),
   ('intelligence',10),('wisdom',10),('charisma',10),

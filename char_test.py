@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 
 from char import *
+from dice import Dice
 
 ALL = False
 ALWAYS = 'str,dex,con,int,wis,cha,melee,ranged,hp_max'
 
 c = Pathfinder()
+
+def main():
+  test_duration()
 
 def show(c):
   print ''
@@ -18,6 +22,22 @@ def show_hp(c):
   for name in ('constitution','con','hp_max','hp'):
     stat = c.get_stat(name)
     print '%s = %s / %s' % (name,stat.value,stat.normal)
+
+class MockStat(object):
+  def __init__(self,value):
+    self.value = value
+
+class MockCharacter(object):
+  def __init__(self):
+    self.stats = {'level':MockStat(5),'caster_level':MockStat(7)}
+
+def test_duration():
+  char = MockCharacter()
+  for dur in ['5rds','10minutes','5h','10min/CL','rd/2lvl']:
+    print '%s = %s' % (dur,Duration(dur,char))
+
+def test_dice_sort():
+  print sorted([5,Dice('1d5'),Dice('1d5-4'),12,Dice('1d5+4'),Dice('3d5+10'),50,20,7,Dice('30')])
 
 def test_basic():
   show(c)
@@ -63,4 +83,5 @@ def test_normal():
   c.set_stat('level','3')
   show_hp(c)
 
-test_set_stat()
+if __name__=='__main__':
+  main()

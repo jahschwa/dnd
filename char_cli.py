@@ -190,16 +190,63 @@ class CLI(cmd.Cmd):
 
     if not self.char:
       return '[ --- none --- ] '
-    c = self.char
-    s = len(c.stats)
-    b = len(c.bonuses)
-    a = len([x for x in c.bonuses.values() if x.active])
-    return '[ S:%-2s B:%2s/%-2s ] ' % (s,a,b)
+
+    prompt = self.char._get_prompt()
+    if '\n' in prompt:
+      prompt = prompt.split('\n')
+      while len(prompt)>1:
+        print prompt.pop(0)
+      prompt = prompt[0]
+    return prompt
 
   def parseline(self,line):
 
-    args = line.split()
+    args = self.get_args(line)
     return (args[0] if args else '',args[1:],line)
+
+  # @param args (str) a command string
+  # @param lower (bool) [False] whether to lowercase everything
+  # @return (list) space-separated args, without quotes commas create a list
+  def get_args(self,args,lower=False,split=True):
+    """get space-separated args accounting for quotes"""
+
+    l = []
+    quote = False
+    last_quoted = False
+    to_lower = lower
+    s = ''
+    for (i,c) in enumerate(args+' '):
+
+      # separate on spaces unless inside quotes
+      if c==' ' or i==len(args):
+        if quote:
+          s += c
+        elif s:
+          if not last_quoted and split:
+            l.append(s.split(',') if ',' in s else s)
+          else:
+            l.append(s)
+          last_quoted = False
+          s = ''
+
+      # keep track of quotes
+      elif c=='"':
+        if quote:
+          quote = False
+          to_lower = lower
+        else:
+          quote = True
+          last_quoted = True
+          to_lower = False
+
+      # add characters to the current string
+      else:
+        if to_lower:
+          s += c.lower()
+        else:
+          s += c
+
+    return l
 
   def emptyline(self):
     pass
@@ -282,7 +329,7 @@ class CLI(cmd.Cmd):
 
   def default(self,line):
 
-    args = [a.split(',') if ',' in a else a for a in line.split()]
+    args = self.get_args(line)
     if args[0] in self.exported:
       val = self.exported[args[0]]
       if isinstance(val,dict):
@@ -327,7 +374,7 @@ class CLI(cmd.Cmd):
 
     name = func.__name__.replace('_',' ')
     opts = ['[%s]' % s for s in kwargs]
-    space = ' ' if opts else ''
+    space = ' ' if args and opts else ''
     sig = '(%s) %s%s%s' % (name,' '.join(args),space,' '.join(opts))
 
     return (sig,args,kwargs)

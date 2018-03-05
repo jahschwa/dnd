@@ -45,6 +45,7 @@
 #   Armor
 # Dice
 # Ability
+#   Spell
 # Event
 # Text
 
@@ -71,26 +72,39 @@ class UserQuitException(Exception):
 class UserSkipException(Exception):
   pass
 
-class Universe(object):
+class Universe(dict):
   def __contains__(self,obj):
     return True
-  def __get__(self,x):
+  def __getitem__(self,x):
+    return 'GALAXY'
+  def get(self,x,d):
     return 'GALAXY'
 
 class Character(object):
 
-  STATS = {}
-  BONUSES = Universe()
+  STATS = OrderedDict()
+  BONUSES = OrderedDict()
+  EFFECTS = OrderedDict()
+  ITEMS = OrderedDict()
+  ABILITIES = OrderedDict()
+  EVENTS = OrderedDict()
+  TEXTS = OrderedDict([('name','UNNAMED')])
 
-  def __init__(self,setup=True):
+  BONUSS = BONUSES
+  ABILITYS = ABILITIES
 
+  BONUS_STACK = Universe()
+
+  def __init__(self,setup=True,name=None):
+
+    self.name = name
     self.stat = OrderedDict(); self.stats = self.stat
     self.bonus = OrderedDict(); self.bonuses = self.bonus
     self.effect = OrderedDict(); self.effects = self.effect
     self.item = OrderedDict(); self.items = self.item
     self.ability = OrderedDict(); self.abilities = self.ability
     self.event = OrderedDict(); self.events = self.event
-    self.note = OrderedDict(); self.notes = self.note
+    self.text = OrderedDict(); self.texts = self.text
 
     self.letters = OrderedDict([
       ('s','stat'),
@@ -99,7 +113,7 @@ class Character(object):
       ('i','item'),
       ('a','ability'),
       ('v','event'),
-      ('n','note')])
+      ('t','text')])
 
     self.export = ['search','on','off','revert','get','all']
     self.export_prefix = ['add','set','del']
@@ -107,21 +121,35 @@ class Character(object):
       '?':'search','+':'on','-':'off','r':'revert','g':'get','l':'all',
       'a':'add','s':'set','d':'del'
     }
-    self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sb'} # TODO
+    self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sbt'} # TODO
 
     if setup:
       self._setup()
 
   def _setup(self,ignore_dupes=False):
 
-    for (name,formula) in self.STATS.items():
-      try:
-        self.add_stat(name,str(formula))
-      except DuplicateError:
-        if ignore_dupes:
-          pass
-        else:
-          raise
+    for typ in self.letters.values():
+      for (name,s) in getattr(self,typ.upper()+'S').items():
+        try:
+          getattr(self,'add_'+typ)(name,str(s))
+        except DuplicateError:
+          if ignore_dupes:
+            pass
+          else:
+            raise
+
+    if self.name:
+      self.set_text('name',self.name)
+
+  def _get_prompt(self):
+
+    s = len(self.stats)
+    b = len(self.bonuses)
+    a = len([x for x in self.bonuses.values() if x.active])
+    return '[ S:%s B:%s/%s ] ' % (s,a,b)
+
+  def _get_name(self):
+    return self.texts['name'].text
 
   def save(self,name):
 
@@ -137,7 +165,7 @@ class Character(object):
   def load(name):
 
     with open(name,'r') as f:
-      lines = [x.strip() for x in f.readlines()]
+      lines = [x.strip('\n') for x in f.readlines()]
 
     errors = []
     chars = {k:v for (k,v) in globals().items()
@@ -230,13 +258,39 @@ class Character(object):
       if action is not None:
         action(key,x)
 
+  def _yn(self,prompt,default=True,blank=True):
+
+    yes = ('y','yes','ok')
+    no = ('n','no','cancel')
+    choices = 'Y/n' if default else 'N/y'
+    response = self._input(
+        '%s? (%s)' % (prompt,choices),
+        valid = lambda x: x.lower() in yes+no,
+        blank = blank
+    )
+
+    if response=='':
+      return default
+
+    return response.lower() in yes
+
+  def _yns(self,actions,**kwargs):
+
+    for (prompt,key,action) in actions:
+      try:
+        x = self._yn(prompt,**kwargs)
+      except UserSkipException:
+        break
+      if action is not None:
+        action(key,x)
+
   def search(self,name,ignore='_'):
 
     matches = []
     for (l,d) in self.letters.items():
       for (n,obj) in getattr(self,d).items():
         if name in n and (ignore=='*' or not n.startswith(ignore)):
-          matches.append('%s | %s' % (l,obj))
+          matches.append('%s | %s' % (l,obj.str_search()))
     return '\n'.join(matches)
 
   # @raise KeyError if typ does not exist
@@ -293,6 +347,7 @@ class Character(object):
     try:
       stat = self.stats[name]
       stat.unplug()
+      del self.stats[name]
     except KeyError:
       raise KeyError('unknown stat "%s"' % name)
 
@@ -329,14 +384,14 @@ class Character(object):
   def _add_bonus(self,bonus):
 
     if bonus.name in self.bonuses:
-      raise ValueError('bonus "%s" already exists' % bonus.name)
+      raise DuplicateError('bonus "%s" already exists' % bonus.name)
     bonus.plug(self)
     self.bonuses[bonus.name] = bonus
 
   # @raise ValueError if name already exists
-  def add_bonus(self,name,value,stats,typ=None,text=None,active=True):
+  def add_bonus(self,name,value,stats,typ=None,cond=None,text=None,active=True):
 
-    bonus = Bonus(name,Dice(value),stats,typ,text,active)
+    bonus = Bonus(name,Dice(value),stats,typ,cond,text,active)
     self._add_bonus(bonus)
 
   # @raise KeyError if name does not exist
@@ -363,7 +418,7 @@ class Character(object):
   def _add_effect(self,effect):
 
     if effect.name in self.effects:
-      raise ValueError('effect "%s" already exists' % effect.name)
+      raise DuplicateError('effect "%s" already exists' % effect.name)
     effect.plug(self)
     self.effects[effect.name] = effect
 
@@ -385,6 +440,36 @@ class Character(object):
       effect.plug(self)
       self.effects[name] = effect
       raise e
+
+  def _add_text(self,text):
+
+    if text.name in self.texts:
+      raise DuplicateError('text "%s" already exists' % text.name)
+    self.texts[text.name] = text
+
+  # @raise ValueError if name already exists
+  def add_text(self,name,text):
+
+    text = Text(name,text)
+    self._add_text(text)
+
+  # @raise KeyError if name does not exist
+  def set_text(self,name,text):
+
+    try:
+      t = self.texts[name]
+    except KeyError:
+      raise KeyError('unknown text "%s"' % name)
+
+    t.set(text)
+
+  # @raise KeyError if name does not exist
+  def del_text(self,name):
+
+    try:
+      del self.texts[name]
+    except KeyError:
+      raise KeyError('unknown text "%s"' % name)
 
   # @raise KeyError if name does not exist
   def on(self,name):
@@ -409,6 +494,9 @@ class Character(object):
       self.bonuses[name].revert()
     except KeyError:
       raise KeyError('unknwown bonus "%s"' % name)
+
+  def stacks(self,typ):
+    return not self.BONUS_STACK or typ in self.BONUS_STACK
 
 class Field(object):
 
@@ -444,6 +532,9 @@ class Field(object):
         i += 1
       parsed.append(val)
     return cls(*parsed)
+
+  def __repr__(self):
+    return '<%s %s>' % (self.__class__.__name__,self.name)
 
 class Stat(Field):
 
@@ -561,7 +652,7 @@ class Stat(Field):
       bonuses = [b.get_value() for b in bonuses if b.active]
       if not bonuses:
         continue
-      if Bonus.stacks(typ):
+      if self.char.stacks(typ):
         self.value += sum(bonuses)
       else:
         self.value += max(bonuses)
@@ -585,6 +676,24 @@ class Stat(Field):
     if not self.bonuses[typ]:
       del self.bonuses[typ]
 
+  def get_bonuses(self):
+
+    bonuses = []
+    conds = []
+    for typ in self.bonuses.values():
+      for b in typ:
+        if b.condition:
+          conds.append((self.name,b))
+        else:
+          bonuses.append((self.name,b))
+
+    for stat in self.uses:
+      (b,c) = self.char.stats[stat].get_bonuses()
+      bonuses += b
+      conds += c
+
+    return (bonuses,conds)
+
   def copy(self,**kwargs):
 
     for var in ('name','bonuses','text','updated'):
@@ -597,22 +706,49 @@ class Stat(Field):
 
     return self.__class__(name,formula,text,bonuses,updated,**k)
 
-  def __str__(self):
+  def _str_flags(self):
 
     root = '-r'[self.root]
     leaf = '-l'[self.leaf]
-    return '%s%s %3s %s' % (root,leaf,self.value,self.name)
+    return '%s%s' % (root,leaf)
 
-  def __repr__(self):
-    return '<%s %s>' % (self.__class__.__name__,self.name)
+  def _str(self,cond_bonuses=False):
+
+    flags = self._str_flags()
+    (bonuses,conds) = self.get_bonuses()
+    (total_b,total_c,active_b,active_c) = (len(bonuses),len(conds),0,0)
+    for (stat,b) in bonuses:
+      if b.active:
+        active_b += 1
+    for (stat,b) in conds:
+      if b.active:
+        active_c += 1
+    stats = 'b:%s/%s ?:%s/%s' % (active_b,total_b,active_c,total_c)
+    bons = ''
+    if cond_bonuses:
+      bons = ''.join(['\n  %s'%b[1]._str(stat=False) for b in conds])
+    return '%s %3s %s (%s)%s' % (flags,self.value,self.name,stats,bons)
+
+  def str_search(self):
+    return self._str()
+
+  def __str__(self):
+    return self._str(True)
 
   def str_all(self):
 
     l =     ['  value | %s' % self.value]
     l.append('formula | %s' % self.original)
     x = []
-    for typ in self.bonuses.values():
-      x +=  ['  bonus | %s' % b for b in typ]
+    (bonuses,conds) = self.get_bonuses()
+    for (stat,bonus) in bonuses:
+      name = '' if stat==self.name else '<%s> ' % stat
+      x +=  ['  bonus | %s%s' % (name,bonus._str(stat=False))]
+    l.extend(sorted(x))
+    x = []
+    for (stat,bonus) in conds:
+      name = '' if stat==self.name else '<%s> ' % stat
+      x +=  [' bonus? | %s%s' % (name,bonus._str(stat=False))]
     l.extend(sorted(x))
     l.append(' normal | %s' % self.normal)
     l.append('   uses | %s' % ','.join(sorted(self.uses)))
@@ -627,23 +763,20 @@ class Bonus(Field):
       ('value',int),
       ('stats',list),
       ('typ',str),
+      ('condition',str),
       ('text',str),
       ('active',bool)
   ])
 
-  @staticmethod
-  def stacks(typ):
-
-    return typ in ('none','dodge','circumstance','racial','penalty')
-
-  def __init__(self,name,value,stats,typ=None,text=None,active=True):
+  def __init__(self,name,value,stats,typ=None,cond=None,text=None,active=True):
 
     self.name = name
     self.value = value
     self.stats = stats if isinstance(stats,list) else [stats]
     self.text = text or ''
-    self.active = active
+    self.active = False if cond else active
     self.typ = (typ or 'none').lower()
+    self.condition = cond or ''
 
     self.char = None
     self.usedby = set()
@@ -651,7 +784,7 @@ class Bonus(Field):
 
   def plug(self,char):
 
-    if self.typ not in char.BONUSES:
+    if char.BONUS_TYPES and self.typ not in char.BONUS_TYPES:
       raise ValueError('invalid bonus type "%s"' % self.typ)
 
     for name in self.stats:
@@ -659,6 +792,9 @@ class Bonus(Field):
       stat.add_bonus(self)
       stat.calc()
     self.char = char
+
+    if not self.condition and self.typ in self.char.BONUS_PERM:
+      self.active = True
 
   def unplug(self):
 
@@ -688,6 +824,8 @@ class Bonus(Field):
 
   def toggle(self,new):
 
+    if not self.condition and self.typ in self.char.BONUS_PERM:
+      return
     self.last = self.active
     self.active = new
     self.calc()
@@ -699,11 +837,23 @@ class Bonus(Field):
     self.active = self.last
     self.calc()
 
-  def __str__(self):
+  def _str(self,name=True,stat=True):
 
+    (n,s) = ('','')
+    if name:
+      n = ' %s' % self.name
+    if stat:
+      s = ' %s' % ','.join(self.stats)
     act = '-+'[self.active]
     sign = '+' if self.value>=0 else ''
-    return '%s %s %s%s (%s)' % (act,self.name,sign,self.get_value(),self.typ)
+    cond = '' if not self.condition else ' ? %s' % self.condition
+    return '[%s]%s %s%s%s (%s)%s' % (act,n,sign,self.get_value(),s,self.typ,cond)
+
+  def str_search(self):
+    return str(self)
+
+  def __str__(self):
+    return self._str()
 
   def str_all(self):
 
@@ -712,6 +862,7 @@ class Bonus(Field):
     l.append('   type | %s' % self.typ)
     l.append(' revert | %s' % ('change','same')[self.last==self.active])
     l.append('  stats | %s' % ','.join(sorted(self.stats)))
+    l.append('conditn | %s' % self.condition)
     l.append('   text | %s' % self.text)
     return '\n'.join(l)
 
@@ -721,8 +872,8 @@ class Duration(object):
   INF_NAMES = (None,'inf','infinity','infinite','perm','permanent','forever')
 
   UNITS = {
-      ('','r','rd','rds','round','rounds') : 1,
-      ('m','mi','min','minute','minutes') : 10,
+      ('','r','rd','rds','rnd','rnds','round','rounds') : 1,
+      ('m','mi','min','mins','minute','minutes') : 10,
       ('h','hr','hrs','hour','hours') : 600,
       ('d','day','days') : 14400,
       ('y','yr','yrs','year','years') : 5259600,
@@ -838,7 +989,7 @@ class Duration(object):
         x = x%num
     return '+'.join(s)
 
-class Effect(object):
+class Effect(Field):
 
   def __init__(self,name,bonuses,duration=None,text=None,active=None):
 
@@ -915,24 +1066,53 @@ class Effect(object):
     names = [b.name for b in self.bonuses]
     return '%s %s %s (%s)' % (act,self.name,self.duration,','.join(names))
 
+  def str_search(self):
+    return str(self)
+
   def str_all(self):
 
-    s = str(self)
-
-    l =     ['duration | %s' % self.duration]
+    l =      ['duration | %s' % self.duration]
     l.extend([' bonuses | %s' % b for b in self.bonuses])
-    l.append('  active | %s/%s (init: %s)' % (
+    l.append( '  active | %s/%s (init: %s)' % (
         len([b for b in self.bonuses if b.active]),
         len(self.bonuses),
         {True:'+',False:'-',None:'='}[self.active]
     ))
-    l.append('    text | '+self.text)
+    l.append( '    text | '+self.text)
     return '\n'.join(l)
 
-class Text(object):
+class Text(Field):
 
-  def __init__(self):
-    raise NotImplementedError
+  FIELDS = OrderedDict([
+      ('name',str),
+      ('text',str),
+  ])
+
+  def __init__(self,name,text):
+
+    self.name = name
+    self.set(text)
+
+  def set(self,text):
+
+    text = text or ''
+    self.text = text.strip().replace('\n','\\n')
+
+  def __str__(self):
+
+    text = '[BLANK]' if not self.text else self.text.replace('\\n',' | ')
+    ellip = ''
+    if len(text)>50:
+      (text,ellip) = (text[:50],'...')
+    return '%s: %s%s' % (self.name,text,ellip)
+
+  def str_search(self):
+    return str(self)
+
+  def str_all(self):
+
+    text = '[BLANK]' if not self.text else self.text
+    return '--- %s\n%s' % (self.name,text.replace('\\n','\n'))
 
 class Event(object):
 
@@ -945,9 +1125,13 @@ class Event(object):
 
 class Pathfinder(Character):
 
-  STATS = OrderedDict([
+  STATS = Character.STATS.copy()
+  STATS.update([
 
   ('level',1),('hd','$level'),('caster_level','$level'),
+
+  ('size',0),('legs',2),
+  ('_size_index','4 if $size not in [8,4,2,1,0,-1,-2,-4,-8] else [8,4,2,1,0,-1,-2,-4,-8].index($size)'),
 
   ('strength',10),('dexterity',10),('constitution',10),
   ('intelligence',10),('wisdom',10),('charisma',10),
@@ -964,26 +1148,30 @@ class Pathfinder(Character):
   ('armor_check',0),('_max_dex',99),('spell_fail',0),
 
   ('_ac_armor',0),('_ac_shield',0),('_ac_dex','min($dex,$_max_dex)'),
-  ('_ac_size','0'),('_ac_nat',0),('_ac_deflect',0),('_ac_misc',0),
-  ('ac','10+$_ac_armor+$_ac_shield+$_ac_dex+$_ac_size+$_ac_nat+$_ac_deflect+$_ac_misc'),
-  ('touch','10+$_ac_dex+$_ac_size+$_ac_deflect+$_ac_misc'),
-  ('ff','10+$_ac_armor+$_ac_shield+$_ac_size+$_ac_nat+$_ac_deflect+$_ac_misc'),
+  ('_ac_nat',0),('_ac_deflect',0),('_ac_misc',0),
+  ('ac','10+$_ac_armor+$_ac_shield+$_ac_dex+$size+$_ac_nat+$_ac_deflect+$_ac_misc'),
+  ('ac_touch','10+$_ac_dex+$size+$_ac_deflect+$_ac_misc'),
+  ('ac_ff','10+$_ac_armor+$_ac_shield+$size+$_ac_nat+$_ac_deflect+$_ac_misc'),
 
   ('fortitude','$con'),('reflex','$dex'),('will','$wis'),
 
-  ('bab',0),('sr',0),('melee','$bab+$str'),('ranged','$bab+$dex'),
+  ('bab',0),('sr',0),('melee','$bab+$size+$str'),('ranged','$bab+$size+$dex'),
 
-  ('cmb','$melee-$_ac_size'),
-  ('cmd','10+$bab+$str+$_ac_dex+$_ac_deflect+$_ac_misc-$_ac_size'),
+  ('cmb','$melee-2*$size'),
+  ('cmd','10+$bab+$str+$_ac_dex+$_ac_deflect+$_ac_misc-$size'),
 
   ('acp','0'),
 
-  ('carry_heavy','10*$strength if $strength<11 else 2**int(($strength-11)/5)*[200,115,130,150,175][$strength%5]'),
+  ('_carry_size','([0.125,0.25,0.5,0.75,1,2,4,8,16] if $legs==2 else [0.25,0.5,0.75,1,1.5,3,6,12,24])[$_size_index]'),
+  ('carry_heavy','$_carry_size*(10*$strength if $strength<11 else 2**int(($strength-11)/5)*[200,115,130,150,175][$strength%5])'),
   ('carry_light','int($carry_heavy/3)'),
   ('carry_medium','int(2*$carry_heavy/3)'),
   ('carry_lift_head','$carry_heavy'),
   ('carry_lift_ground','2*$carry_heavy'),
-  ('carry_drag','5*$carry_heavy')
+  ('carry_drag','5*$carry_heavy'),
+
+  ('spell_mod',0),('spells_mod',0),('spell_dc','10+$spell_mod'),
+  ('concentration','$caster_level+$spell_mod')
 
   ])
 
@@ -1007,39 +1195,61 @@ class Pathfinder(Character):
 
   ])
 
-  BONUSES = ('alchemical','armor','circumstance','competence','deflection',
+  SKILLS_TRAINED_ONLY = ['disable_device','handle_animal','knowledge',
+      'linguisitics','profession','sleight_of_hand','spellcraft',
+      'use_magic_device']
+
+  TEXTS = Character.TEXTS.copy()
+  TEXTS.update({'race':'','class':'','race_traits':''})
+
+  BONUS_TYPES = ('alchemical','armor','circumstance','competence','deflection',
       'dodge','enhancement','inherent','insight','luck','morale',
       'natural_armor','profane','racial','resistance','sacred','shield',
       'size','trait','penalty','none')
+  BONUS_STACK = ('none','dodge','circumstance','racial','penalty')
+  BONUS_PERM = ('inherent','racial','trait')
 
   AC_BONUS = {'armor':'_ac_armor','deflection':'_ac_deflect','dodge':'_ac_dex',
       'natural_armor':'_ac_nat','shield':'_ac_shield','size':'_ac_size'}
 
-  ABILITIES = ('strength','dexterity','constitution',
-      'intelligence','wisdom','charisma')
-  SAVES = ('fortitude','reflex','will')
+  ABILITIES = ['strength','dexterity','constitution',
+      'intelligence','wisdom','charisma']
+  SAVES = ['fortitude','reflex','will']
+
+  SIZE_NAMES = OrderedDict([
+      ('f','fine'),
+      ('d','diminutive'),
+      ('t','tiny'),
+      ('s','small'),
+      ('m','medium'),
+      ('l','large'),
+      ('h','huge'),
+      ('g','gargantuan'),
+      ('c','colossal')
+  ])
+  SIZES = [8,4,2,1,0,-1,-2,-4,-8]
 
   RACE_INDEX = ['size','speed','abilities','bonuses','traits','manual']
   RACE_INFO = {
       'dwarf':['m',20,'245',
-          [   ('defensive_training',4,'ac','dodge','vs subtype(giant)'),
-              ('hardy',2,SAVES,'vs poison,spells,spell-like-abilities'),
-              ('stability',4,'cmd','vs bull-rush,trip while standing on ground'),
-              ('greed',2,'appraise','on non-magical items containing gems/metals'),
-              ('stonecunning',2,'perception','none','to notice unusual stonework'),
-              ('hatred',1,['melee','ranged'],'vs subtype(orc,goblinoid)')
+          [   ['defensive_training',4,'ac','dodge','vs subtype(giant)'],
+              ['hardy',2,SAVES,'vs poison,spells,spell-like-abilities'],
+              ['stability',4,'cmd','vs bull-rush,trip while standing on ground'],
+              ['greed',2,'appraise','on non-magical items containing gems/metals'],
+              ['stonecunning',2,'perception','none','to notice unusual stonework'],
+              ['hatred',1,['melee','ranged'],'vs subtype(orc,goblinoid)']
           ],
           [   'darkvision 60ft',
               'weapons: battleaxe,heavy_pick,warhammer',
-              'auto preception check within 10ft of unusual stonework'
+              'auto perception check within 10ft of unusual stonework'
           ],
           ['speed never reduced by armor/encumbrance']
       ],
       'elf':['m',30,'132',
-          [   ('immunities',2,SAVES,'vs enchantment spells/effects'),
-              ('keen_senses',2,'perception'),
-              ('magic',2,'caster_level','to overcome spell resistance'),
-              ('magic_items',2,'spellcraft','to identify magic items')
+          [   ['immunities',2,SAVES,'vs enchantment spells/effects'],
+              ['keen_senses',2,'perception'],
+              ['magic',2,'caster_level','to overcome spell resistance'],
+              ['magic_items',2,'spellcraft','to identify magic items']
           ],
           [   'immune to magic sleep',
               'low-light-vision',
@@ -1048,18 +1258,18 @@ class Pathfinder(Character):
           []
       ],
       'gnome':['s',20,'250',
-          [   ('defensive_training',4,'ac','dodge','vs subtype(giant)'),
-              ('illusion_resistance',2,SAVES,'vs illusion spells/effects'),
-              ('keen_senses',2,'perception'),
-              ('magic',1,'spell_dc','none','for illusion spells'),
-              ('hatred',1,['melee','ranged'],'none','vs subtype(reptilian,goblinoid)')
+          [   ['defensive_training',4,'ac','dodge','vs subtype(giant)'],
+              ['illusion_resistance',2,SAVES,'vs illusion spells/effects'],
+              ['keen_senses',2,'perception'],
+              ['magic',1,'spell_dc','none','for illusion spells'],
+              ['hatred',1,['melee','ranged'],'none','vs subtype(reptilian,goblinoid)']
           ],
           ['low-light-vision'],
           ['+2 on 1 craft or profession','gnome_magic']
       ],
-      'half-elf': ['m',30, None,
-          [   ('immunities',2,SAVES,'vs enchantment spells/effects'),
-              ('keen_senses',2,'perception'),
+      'halfelf': ['m',30, None,
+          [   ['immunities',2,SAVES,'vs enchantment spells/effects'],
+              ['keen_senses',2,'perception'],
           ],
           [   'immune to magic sleep',
               'low-light-vision',
@@ -1068,16 +1278,16 @@ class Pathfinder(Character):
           ],
           ['skill focus at 1st level']
       ],
-      'half-orc': ['m',30, None,
-          [('intimidating',2,'intimidate')],
+      'halforc': ['m',30, None,
+          [['intimidating',2,'intimidate']],
           ['darkvision 60ft','count as both orcs and humans'],
           ['ferocity 1/day for 1 round']
       ],
       'halfling': ['s',20,'150',
-          [   ('fearless',2,SAVES,'vs fear'),
-              ('luck',1,SAVES),
-              ('sure_footed',2,['acrobatics','climb']),
-              ('keen_senses',2,'perception')
+          [   ['fearless',2,SAVES,'vs fear'],
+              ['luck',1,SAVES],
+              ['sure_footed',2,['acrobatics','climb']],
+              ['keen_senses',2,'perception']
           ],
           ['weapons: sling'],
           []
@@ -1089,40 +1299,40 @@ class Pathfinder(Character):
       ]
   }
 
-  CLASS_INDEX = ['skills','bab','saves']
+  CLASS_INDEX = ['skills','bab','saves','cast_mod']
   CLASS_INFO = {
-      'barbarian': ['10011000001010000001000010010000110','1.00','100'],
-      'bard':      ['11111101100011111111111111101111001','0.75','011'],
-      'cleric':    ['01001100000101000100111100101010000','0.75','101'],
-      'druid':     ['00011000011100001001000010110010110','0.75','101'],
-      'fighter':   ['00011000001010110000000000110000110','1.00','100'],
-      'monk':      ['10011000100010000100001011111001010','0.75','111'],
-      'paladin':   ['00001100001100000000101000111010000','1.00','101'],
-      'ranger':    ['00011000001110101001000010110011110','1.00','110'],
-      'rogue':     ['11111111100010100010000111101101011','0.75','010'],
-      'sorcerer':  ['01101000010011000000000000100010001','0.50','001'],
-      'wizard':    ['01001000010001111111111100100010000','0.50','001'],
+      'barbarian': ['10011000001010000001000010010000110','1.00','100',None],
+      'bard':      ['11111101100011111111111111101111001','0.75','011','cha'],
+      'cleric':    ['01001100000101000100111100101010000','0.75','101','wis'],
+      'druid':     ['00011000011100001001000010110010110','0.75','101','wis'],
+      'fighter':   ['00011000001010110000000000110000110','1.00','100',None],
+      'monk':      ['10011000100010000100001011111001010','0.75','111',None],
+      'paladin':   ['00001100001100000000101000111010000','1.00','101','cha'],
+      'ranger':    ['00011000001110101001000010110011110','1.00','110','wis'],
+      'rogue':     ['11111111100010100010000111101101011','0.75','010',None],
+      'sorcerer':  ['01101000010011000000000000100010001','0.50','001','cha'],
+      'wizard':    ['01001000010001111111111100100010000','0.50','001','int'],
 
-      'alchemist':   ['01000010010101000001000010100110101','0.75','110'],
-      'cavalier':    ['00111100001010000000000000111000010','1.00','100'],
-      'gunslinger':  ['10111000001110010010000010110100110','1.00','110'],
-      'inquisitor':  ['00111101000111100001011010111011110','0.75','101'],
-      'magus':       ['00011000010011100000010000110010011','0.75','101'],
-      'oracle':      ['00001100000100000100011000101010000','0.75','001'],
-      'summoner':    ['00001000011000000000000100110010001','0.75','001'],
-      'vigilante':   ['11111111100010110010000011111101111','0.75','011'],
-      'witch':       ['00001000010111000101010000100010001','0.50','011'],
+      'alchemist':   ['01000010010101000001000010100110101','0.75','110','int'],
+      'cavalier':    ['00111100001010000000000000111000010','1.00','100',None],
+      'gunslinger':  ['10111000001110010010000010110100110','1.00','110',None],
+      'inquisitor':  ['00111101000111100001011010111011110','0.75','101','wis'],
+      'magus':       ['00011000010011100000010000110010011','0.75','101','int'],
+      'oracle':      ['00001100000100000100011000101010000','0.75','001','cha'],
+      'summoner':    ['00001000011000000000000100110010001','0.75','001','cha'],
+      'vigilante':   ['11111111100010110010000011111101111','0.75','011',None],
+      'witch':       ['00001000010111000101010000100010001','0.50','011','int'],
 
-      'arcane archer':         ['00000000000000000000000010010001100','1.00','332'],
-      'arcane trickster':      ['11110111100001111111111010001111010','0.50','233'],
-      'assassin':              ['10110111100010000000000110001101011','0.75','232'],
-      'dragon disciple':       ['00000100110001111111111010000010000','1.00','323'],
-      'duelist':               ['10100000100000000000000011001000000','1.00','232'],
-      'eldritch knight':       ['00010000000001000000100100011010010','1.00','322'],
-      'loremaster':            ['01000100001101111111111101000010001','0.50','223'],
-      'mystic theurge':        ['00000000000001000000001000001010000','0.50','223'],
-      'pathfinder chronicler': ['01100101100011111111111111011100101','0.75','233'],
-      'shadowdancer':          ['10100101100000000000000011000101000','0.75','232']
+      'arcane archer':         ['00000000000000000000000010010001100','1.00','332',None],
+      'arcane trickster':      ['11110111100001111111111010001111010','0.50','233',None],
+      'assassin':              ['10110111100010000000000110001101011','0.75','232',None],
+      'dragon disciple':       ['00000100110001111111111010000010000','1.00','323',None],
+      'duelist':               ['10100000100000000000000011001000000','1.00','232',None],
+      'eldritch knight':       ['00010000000001000000100100011010010','1.00','322',None],
+      'loremaster':            ['01000100001101111111111101000010001','0.50','223',None],
+      'mystic theurge':        ['00000000000001000000001000001010000','0.50','223',None],
+      'pathfinder chronicler': ['01100101100011111111111111011100101','0.75','233',None],
+      'shadowdancer':          ['10100101100000000000000011000101000','0.75','232',None]
   }
 
   CLASS_SAVES = ['int(x/3)','2+int(x/2)','int((x+1)/3)','1+int((x-1)/2)']
@@ -1135,7 +1345,7 @@ class Pathfinder(Character):
   def __init__(self,*args,**kwargs):
 
     super(Pathfinder,self).__init__(*args,**kwargs)
-    self.export += ['dmg','heal','health','skill','wizard']
+    self.export += ['dmg','heal','skill','wiz']
 
   def _setup(self,ignore_dupes=False):
 
@@ -1149,6 +1359,34 @@ class Pathfinder(Character):
           pass
         else:
           raise
+
+  def _get_prompt(self):
+    return '[%s   %s]\n \___ ' % (self._get_name(),self._health())
+
+  def _get_status(self):
+
+    current = self.stats['hp'].value
+    max_hp = self._max_hp()
+    nonlethal = self.stats['nonlethal'].value
+    death = -self.stats['constitution'].value
+
+    status = 'up'
+    if current<=death:
+      status = 'DEAD'
+    elif current<0:
+      status = 'DYING'
+    elif current==0:
+      status = 'STAGGERED'
+    elif nonlethal>=current:
+      status = 'UNCON'
+
+    return (current,max_hp,nonlethal,death,status)
+
+  def _set_size(self,size):
+
+    size = size[0]
+    i = self.SIZE_NAMES.keys().index(size)
+    self.set_stat('size',self.SIZES[i],self.SIZE_NAMES[size])
 
   def dmg(self,damage,nonlethal=False):
 
@@ -1165,8 +1403,6 @@ class Pathfinder(Character):
         self.add_bonus('_damage',-damage,'hp')
       if damage>=50 and damage>=int(self._max_hp()/2):
         print '!!! Massive damage'
-
-    self.health()
 
   def heal(self,damage):
 
@@ -1188,27 +1424,10 @@ class Pathfinder(Character):
     if nonlethal:
       self.set_stat('nonlethal',self.stats['nonlethal'].value-nonlethal)
 
-    self.health()
+  def _health(self):
 
-  def health(self):
-
-    current = self.stats['hp'].value
-    max_hp = self._max_hp()
-    nonlethal = self.stats['nonlethal'].value
-    death = -self.stats['constitution'].value
-
-    status = 'up'
-    if current<=death:
-      status = 'DEAD'
-    elif current<0:
-      status = 'DYING'
-    elif current==0:
-      status = 'STAGGERED'
-    elif nonlethal>=current:
-      status = 'UNCON'
-
-    print ('HP: %s/%s   Nonlethal: %s   Death: %s   Status: %s'
-        % (current,max_hp,nonlethal,death,status))
+    return ('HP: %s/%s   Nonlethal: %s   Death: %s   Status: %s'
+        % self._get_status())
 
   def _max_hp(self):
 
@@ -1259,22 +1478,23 @@ class Pathfinder(Character):
 
   ##### OVERRIDES #####
 
-  def add_bonus(self,name,value,stats,typ=None,text=None,active=True):
+  def add_bonus(self,name,value,stats,typ=None,cond=None,text=None,active=True):
 
     if isinstance(stats,str) and stats.lower()=='ac':
       stats = self.AC_BONUS.get(typ,'_ac_misc')
-    super(Pathfinder,self).add_bonus(name,value,stats,typ,text,active)
+    super(Pathfinder,self).add_bonus(name,value,stats,typ,cond,text,active)
 
-  ##### WIZARD #####
+  ##### SETUP WIZARD #####
 
-  def wizard(self,action='help'):
+  def wiz(self,action='help'):
 
     actions = ['level','race','class','abilities','skill']
-    if action not in actions and action not in ('help','all'):
+    standalone = ['size','class_skill']
+    if action not in actions+standalone and action not in ('help','all'):
       raise ValueError('invalid sub-command "%s"' % action)
 
     if action=='help':
-      print 'usage: wizard [all] (%s)' % ('|'.join(sorted(actions)))
+      print '(wiz) [all] (%s)' % ('|'.join(sorted(actions+standalone)))
 
     else:
       actions = actions if action=='all' else [action]
@@ -1282,7 +1502,7 @@ class Pathfinder(Character):
         for action in actions:
           action = getattr(self,'_wiz_'+action)
           if len(actions)>1:
-            print '--- %s' % action.__doc__
+            print '\n=== %s' % action.__doc__
           try:
             action()
           except UserSkipException:
@@ -1308,34 +1528,40 @@ class Pathfinder(Character):
 
     race = self._input(
         'Enter race name',
+        parse = lambda x: x.replace('-','').replace('_',''),
         valid = lambda x: x in self.RACE_INFO,
         blank = False
     )
+    self.set_text('race',race)
     info = self.RACE_INFO[race]
 
     size = info[self.RACE_INDEX.index('size')]
-    self.set_stat('size',size)
+    self._set_size(size)
 
     speed = info[self.RACE_INDEX.index('speed')]
     self.set_stat('speed',speed)
 
-    bonuses = list(info[self.RACE_INDEX.index('bonuses')])
+    bonuses = info[self.RACE_INDEX.index('bonuses')]
+    if len(bonuses):
+      print '--- racial bonuses'
     for bonus in bonuses:
       args = bonus[:3]+['racial']
+      args[0] = '%s_%s' % (race,args[0])
       while len(bonus)>3:
         s = bonus.pop()
-        if s in self.BONUSES:
+        if s in self.BONUS_TYPES:
           args[3] = s
         else:
           args += [s]
       self.add_bonus(*args)
+      print '  %s' % self.bonuses[args[0]]._str()
 
     traits = info[self.RACE_INDEX.index('traits')]
     if traits:
-      self.add_text('race_traits','\n'.join(traits))
-      print '--- get text race_traits'
+      self.set_text('race_traits','\n'.join(traits))
+      print '--- all text race_traits'
       for t in traits:
-        print t
+        print '  %s' % t
 
     manual = info[self.RACE_INDEX.index('manual')]
     for s in manual:
@@ -1352,23 +1578,40 @@ class Pathfinder(Character):
         valid = lambda x: x in self.CLASS_INFO,
         blank = False
     )
+    self.set_text('class',clas)
     info = self.CLASS_INFO[clas]
 
     names = self.SKILLS.keys()
     one_hot = info[self.CLASS_INDEX.index('skills')]
+    skills = []
     for (i,x) in enumerate(one_hot):
       if x=='1':
-        self.stat[names[i]].set_cskill()
+        skill = names[i]
+        skills.append(skill)
+        self.stat[skill].set_cskill()
+    print 'class skills: %s' % ','.join(skills)
 
     prog = info[self.CLASS_INDEX.index('bab')]
     self.set_stat('bab','int(%s*$level)' % prog)
+    print 'bab progression: %s' % prog
 
     mods = ('con','dex','wis')
     progs = info[self.CLASS_INDEX.index('saves')]
-    for (save,mod,prog) in zip(self.SAVES,mods,saves):
-      base = self.CLASS_SAVES[int(prog)].replace('x','$level')
+    good = []
+    for (save,mod,prog) in zip(self.SAVES,mods,progs):
+      prog = int(prog)
+      if prog in (1,3):
+        good.append(save)
+      base = self.CLASS_SAVES[prog].replace('x','$level')
       new = '$%s+%s' % (mod,base)
       self.set_stat(save,new,force=True)
+    print 'good saves: %s' % ','.join(good)
+
+    mod = info[self.CLASS_INDEX.index('cast_mod')]
+    if mod:
+      self.set_stat('spell_mod','$'+mod)
+      self.set_stat('spells_mod','#'+mod)
+      print 'casting mod: %s' % mod
 
   def _wiz_abilities(self):
     """Ability scores"""
@@ -1382,15 +1625,21 @@ class Pathfinder(Character):
         valid = lambda x: x>=0
     )
 
-    abilities = info[self.RACE_INDEX.inex('abilities')]
-    for (i,a) in enumerate(abilities):
-      a = self.ABILITIES[int(a)]
-      new = self.stats[a].value+(-2 if i==2 else 2)
-      self.set_stat(a,new)
+    race = self.texts['race'].text
+    if race and self._yn('Adjust for %s' % race):
+      info = self.RACE_INFO[race]
+      abilities = info[self.RACE_INDEX.index('abilities')]
+      for (i,a) in enumerate(abilities):
+        a = self.ABILITIES[int(a)]
+        adjust = (-2 if i==2 else 2)
+        new = self.stats[a].value+adjust
+        self.set_stat(a,new)
+        print ('+' if adjust>0 else '')+' '+a
 
   def _wiz_skill(self):
     """Skill ranks"""
 
+    print '+++ Max ranks: %s' % self.stats['level'].value
     self._inputs(
         [(  '%s (%s)' % (s,self.stats[s].ranks),
             s,
@@ -1398,6 +1647,25 @@ class Pathfinder(Character):
         ) for s in self.SKILLS],
         parse = int,
         valid = lambda x: x>=0 and x<=self.stats['level'].value
+    )
+
+  def _wiz_size(self):
+    """Size"""
+
+    size = self._input(
+        'Enter size',
+        valid = lambda x: x[0] in self.SIZE_NAMES.keys()
+    )
+    self._set_size(size)
+
+  def _wiz_class_skill(self):
+    """Class skills"""
+
+    self._yns(
+        [(  '%s (%s)' % (s,'ny'[self.stats[s].class_skill]),
+            s,
+            lambda k,v:self.stats[k].set_cskill(v)
+        ) for s in self.SKILLS]
     )
 
   ##### SKILL CLASS #####
@@ -1428,6 +1696,8 @@ class PathfinderSkill(Stat):
     if f not in self.formula:
       self.set_formula(self.formula+f)
 
+    self.trained_only = False
+
     self.COPY += ['ranks','class_skill']
 
   def set_cskill(self,new=True):
@@ -1450,11 +1720,20 @@ class PathfinderSkill(Stat):
     self.ranks = value
     self.calc()
 
-  def __str__(self):
+  def plug(self,char):
+
+    super(PathfinderSkill,self).plug(char)
+
+    for skill in self.char.SKILLS_TRAINED_ONLY:
+      if self.name.startswith(skill):
+        self.trained_only = True
+        break
+
+  def _str_flags(self):
 
     cs = '-c'[self.class_skill]
-    tr = '-t'[self.ranks>0]
-    return '%s%s %3s %s' % (cs,tr,self.value,self.name)
+    tr = ['-!'[self.trained_only],'t'][self.ranks>0]
+    return '%s%s' % (cs,tr)
 
   def str_all(self):
 
@@ -1462,5 +1741,6 @@ class PathfinderSkill(Stat):
 
     l = ['  ranks | %s' % self.ranks]
     l.append(' cskill | %s' % self.class_skill)
+    l.append('trained | %s' % ['anyone','only'][self.trained_only])
 
     return s+'\n'+'\n'.join(l)

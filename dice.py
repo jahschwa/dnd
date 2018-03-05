@@ -9,6 +9,8 @@ class Dice(object):
   @staticmethod
   def parse(s):
 
+    s = str(s)
+
     if not reduce(lambda a,b: a and (b.isdigit() or b in 'd+-'),s,True):
       raise ValueError('invalid Dice string "%s"' % s)
 
@@ -154,7 +156,7 @@ class Dice(object):
   def max(self):
 
     pos = [n*s for (s,n) in self.dice.items() if n>0]
-    neg = [n for n in self.dice.values() if n<0] 
+    neg = [n for n in self.dice.values() if n<0]
     return sum(pos)+sum(neg)+self.bonus
 
   def stats(self):

@@ -1,20 +1,62 @@
 #!/usr/bin/env python
 
-#def stat ac_dex 3
-#def stat ac_armor 0
-#def stat ff 10+ac_armor
-#def stat touch 10+ac_dex
-#def stat ac 10+ac_dex+ac_armor
-#get ac
-#> 13
-#def bonus mage_armor ac_armor +4
-#get ac,ff,touch
-#> 13,10,13
-#get ac,ff,touch with mage_armor
-#> 17,14,13
-#active mage_armor
-#get ac,ff,touch
-#> 17,14,13
+##### COMMANDS #####
+
+# get (stat|bonus|text) NAME[,NAME...]
+# add stat NAME [FORMULA] [TEXT] [UPDATED]
+# add bonus NAME VALUE STAT[,STAT...] [TYP] [COND] [TEXT] [ACTIVE]
+# add text NAME TEXT
+# set stat NAME [FORMULA] [TEXT] [UPDATED] [FORCE]
+# set bonus NAME VALUE
+# set text NAME TEXT
+# del (stat|bonus|text) NAME
+# all (stat|bonus|text) NAME
+# search TERM
+# on BONUS
+# off BONUS
+# revert BONUS
+
+# dmg HPLOST
+# heal HPHEALED
+# skill (info|list)
+# skill (class|unclass) NAME
+# skill rank NAME RANKS
+# wiz (all|abilities|class|class_skill|level|race|size|skill)
+
+##### ALIASES #####
+
+#    get : g     add : a    set : s      del : d    all : l
+# search : ?      on : +    off : -   revert : r
+#   stat : s   bonus : b   text : t
+
+##### EXAMPLES #####
+
+# TRY THE SETUP (WIZ)ARD FUNCTIONS!
+# >>> wiz all
+
+# >>> get stat ac
+# r-  10 ac (b:0/0 ?:0/0)
+
+# >>> get stat ac,ac_ff,ac_touch
+# r-  10 ac (b:0/0 ?:0/0)
+# r-  10 ac_touch (b:0/0 ?:0/0)
+# r-  10 ac_ff (b:0/0 ?:0/0)
+
+# >>> help add bonus
+# (add bonus) name value stats [typ] [cond] [text] [active]
+
+# >>> add bonus mage_armor +4 ac armor
+# >>> ? ac_touch
+# s | r-  10 ac_touch (b:0/0 ?:0/0)
+
+# >>> all stat ac
+#   value | 14
+# formula | 10+$_ac_armor+$_ac_shield+$_ac_dex+$size+$_ac_nat+$_ac_deflect+$_ac_misc
+#   bonus | <_ac_armor> [+] mage_armor +4 (armor)
+#  normal | 10
+#    uses | _ac_armor,_ac_deflect,_ac_dex,_ac_misc,_ac_nat,_ac_shield,size
+# used by |
+#    text |
 
 # TODO: disallow setting backend stats without additional flag
 # TODO: set should raise exception not return a boolean
@@ -819,7 +861,7 @@ class Bonus(Field):
     self.toggle(True)
 
   def off(self,force=False):
-    if force or not reduce(self.usedby,lambda a,b:a or b.is_active(),False):
+    if force or not reduce(lambda a,b:a or b.is_active(),self.usedby,False):
       self.toggle(False)
 
   def toggle(self,new):

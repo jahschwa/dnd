@@ -5,46 +5,47 @@
 # >>> new
 # >>> set stat dexterity 17
 # >>> get stat ac
-# ac = 13
+# r-  13 ac (b:0/0 ?:0/0)
 #
 # >>> g s ac
-# ac = 13
+# r-  13 ac (b:0/0 ?:0/0)
 #
 # >>> add bonus mage_armor 4 ac armor
-# >>> get stat ac,ff,touch
-# ac = 17
-# ff = 14
-# touch = 13
+# >>> get stat ac,ac_ff,ac_touch
+# r-  17 ac (b:1/1 ?:0/0)
+# r-  14 ac_ff (b:1/1 ?:0/0)
+# r-  13 ac_touch (b:0/0 ?:0/0)
 #
 # >>> off mage_armor
 # >>> get stat ac,ff,touch
-# ac = 13
-# ff = 10
-# touch = 13
+# r-  13 ac (b:1/1 ?:0/0)
+# r-  10 ac_ff (b:1/1 ?:0/0)
+# r-  13 ac_touch (b:0/0 ?:0/0)
 #
 # >>> all bonus mage_armor
-#  value | 4
-# active | False
-#   type | armor
-# revert | change
-#  stats | ac_armor
-#   text |
+#   value | 4
+#  active | False
+#    type | armor
+#  revert | same
+#   stats | _ac_armor
+# conditn |
+#    text |
 #
 # ===== PLANNED FOR THE FUTURE =====
 #
-# >>> get ac,ff,touch with mage_armor
-# ac = 17
-# ff = 14
-# touch = 13
+# >>> get ac,ac_ff,ac_touch with mage_armor
+# r-  17 ac (b:1/1 ?:0/0)
+# r-  14 ac_ff (b:1/1 ?:0/0)
+# r-  13 ac_touch (b:0/0 ?:0/0)
 #
 # >>> get stat ac,ff,touch
-# ac = 13
-# ff = 10
-# touch = 13
+# r-  13 ac (b:1/1 ?:0/0)
+# r-  10 ac_ff (b:1/1 ?:0/0)
+# r-  13 ac_touch (b:0/0 ?:0/0)
 
 # ===== QUICK COMMAND LISTING =====
 #
-# implemented types: stat bonus
+# implemented types: stat bonus text
 #
 # load
 # new

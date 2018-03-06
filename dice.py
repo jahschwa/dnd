@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import random
+import sys,random
 from functools import reduce,total_ordering
 
 @total_ordering
@@ -40,15 +40,17 @@ class Dice(object):
 
   @staticmethod
   def intify(x):
+    """cast floats to ints if they're whole numbers"""
 
-    if x==int(x):
+    if abs(x-int(x))<sys.float_info.epsilon:
       return int(x)
     else:
       return x
 
   def __init__(self,s=''):
-
     (self.dice,self.bonus) = Dice.parse(s)
+
+########## Numeric functions ##########
 
   def __add__(self,obj):
 
@@ -80,6 +82,42 @@ class Dice(object):
     else:
       return NotImplemented
 
+  def __mul__(self,obj):
+
+    if isinstance(obj,Dice):
+      obj = obj.as_int(ignore=False)
+    if isinstance(obj,int):
+      new = self.copy()
+      for d in new.dice:
+        new.dice[d] *= obj
+      new.bonus *= obj
+      return new
+    else:
+      return NotImplemented
+
+  def __rmul__(self,obj):
+    return self*obj
+
+  def __truediv__(self,obj):
+
+    if self.dice:
+      raise ValueError("this Dice isn't just an integer bonus")
+    if isinstance(obj,Dice):
+      obj = obj.as_int(ignore=False)
+    if isinstance(obj,int):
+      return self.bonus/obj
+    else:
+      return NotImplemented
+
+  def __rtruediv__(self,obj):
+
+    if self.dice:
+      raise ValueError("this Dice isn't just an integer bonus")
+    if isinstance(obj,int):
+      return obj/self.bonus
+    else:
+      return NotImplemented
+
   def __eq__(self,other):
 
     if isinstance(other,Dice):
@@ -93,6 +131,24 @@ class Dice(object):
       return self.avg()<other.avg()
     elif isinstance(other,int):
       return self.avg()<other
+
+########## Helper functions ##########
+
+  def __add_int(self,i):
+
+    dice = self.copy()
+    dice.bonus += i
+    return dice
+
+  def __add_dice(self,d):
+
+    dice = self.copy()
+    for (sides,num) in d.dice.items():
+      Dice.dict_add(dice.dice,sides,num)
+    dice.bonus += d.bonus
+    return dice
+
+########## Methods ##########
 
   def neg(self):
 
@@ -117,19 +173,19 @@ class Dice(object):
     dice.bonus = self.bonus
     return dice
 
-  def __add_int(self,i):
+  def as_int(self,ignore=True):
 
-    dice = self.copy()
-    dice.bonus += i
-    return dice
+    if not ignore and self.dice:
+      raise ValueError("this Dice isn't just an integer bonus")
 
-  def __add_dice(self,d):
+    return self.bonus
 
-    dice = self.copy()
-    for (sides,num) in d.dice.items():
-      Dice.dict_add(dice.dice,sides,num)
-    dice.bonus += d.bonus
-    return dice
+  def as_dice(self,ignore=True):
+
+    if not ignore and self.bonus!=0:
+      raise ValueError("this Dice has a numerical bonus")
+
+    return self.copy()
 
   def roll(self):
 
@@ -160,7 +216,6 @@ class Dice(object):
     return sum(pos)+sum(neg)+self.bonus
 
   def stats(self):
-
     return self.__str__()+' = %s/%s/%s' % (self.min(),self.avg(),self.max())
 
   def __str__(self):
@@ -173,4 +228,6 @@ class Dice(object):
       return s[1:]
     return s
 
-  __repr__ = __str__
+  def __repr__(self):
+    return '<Dice %s>' % str(self)
+

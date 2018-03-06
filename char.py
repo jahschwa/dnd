@@ -737,15 +737,17 @@ class Stat(Field):
 
   def copy(self,**kwargs):
 
-    for var in ('name','bonuses','text','updated'):
-      exec('%s = kwargs.get("%s",self.%s)' % ((var,)*3))
+    a = []
+    for var in ('name','text','bonuses','updated'):
+      a.append(kwargs.get(var,getattr(self,var)))
     formula = kwargs.get('formula',self.original)
+    a.insert(1,formula)
 
     k = {}
     for var in self.COPY:
       k[var] = kwargs.get(var,getattr(self,var))
 
-    return self.__class__(name,formula,text,bonuses,updated,**k)
+    return self.__class__(*a,**k)
 
   def _str_flags(self):
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from char import *
 from dice import Dice
@@ -12,16 +12,16 @@ def main():
   test_duration()
 
 def show(c):
-  print ''
+  print('')
   for stat in c.stats.values():
     if ALL or stat.root or stat.name in ALWAYS:
-      print stat
+      print(stat)
 
 def show_hp(c):
-  print ''
+  print('')
   for name in ('constitution','con','hp_max','hp'):
     stat = c.get_stat(name)
-    print '%s = %s / %s' % (name,stat.value,stat.normal)
+    print('%s = %s / %s' % (name,stat.value,stat.normal))
 
 class MockStat(object):
   def __init__(self,value):
@@ -34,10 +34,10 @@ class MockCharacter(object):
 def test_duration():
   char = MockCharacter()
   for dur in ['5rds','10minutes','5h','10min/CL','rd/2lvl']:
-    print '%s = %s' % (dur,Duration(dur,char))
+    print('%s = %s' % (dur,Duration(dur,char)))
 
 def test_dice_sort():
-  print sorted([5,Dice('1d5'),Dice('1d5-4'),12,Dice('1d5+4'),Dice('3d5+10'),50,20,7,Dice('30')])
+  print(sorted([5,Dice('1d5'),Dice('1d5-4'),12,Dice('1d5+4'),Dice('3d5+10'),50,20,7,Dice('30')]))
 
 def test_basic():
   show(c)

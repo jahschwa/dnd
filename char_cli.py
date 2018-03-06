@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # ===== WORKING EXAMPLES =====
 #
@@ -89,13 +89,13 @@ def main(fname):
 
   cli = CLI(fname)
   run = True
-  print ''
+  print('')
   while run:
     try:
       cli.cmdloop()
       run = False
     except KeyboardInterrupt:
-      print 'use Ctrl+D / EOF to exit'
+      print('use Ctrl+D / EOF to exit')
       pass
 
 class ArgsError(Exception):
@@ -117,32 +117,32 @@ class CLI(cmd.Cmd):
     """[DEV] run eval() on input"""
 
     try:
-      print eval(' '.join(args))
+      print(eval(' '.join(args)))
     except:
-      print traceback.format_exc()
+      print(traceback.format_exc())
 
   def do_exec(self,args):
     """[DEV] run exec() on input"""
 
     try:
-      exec ' '.join(args)
+      exec(' '.join(args))
     except:
-      print traceback.format_exc()
+      print(traceback.format_exc())
 
   def do_trace(self,args):
     """[DEV] print traceback for last exception"""
 
-    print self.last_trace
+    print(self.last_trace)
 
   def do_old_load(self,args):
 
     if not args:
-      print 'Missing file name'
+      print('Missing file name')
       return
     if not self.overwrite():
       return
     if not os.path.isfile(args[0]):
-      print 'Unable to read "%s"' % args[0]
+      print('Unable to read "%s"' % args[0])
       return
     try:
       with open(args[0],'rb') as f:
@@ -150,18 +150,18 @@ class CLI(cmd.Cmd):
         self.fname = args[0]
         self.modified = False
     except Exception:
-      print 'Unable to unpickle "%s"' % args[0]
+      print('Unable to unpickle "%s"' % args[0])
 
   def do_old_save(self,args):
 
     fname = self.fname if not args else ' '.join(args)
     if not fname:
-      fname = raw_input('Enter a file name: ')
+      fname = input('Enter a file name: ')
     try:
       with open(fname,'a') as f:
         pass
     except:
-      print 'Unable to write "%s"' % fname
+      print('Unable to write "%s"' % fname)
       return
     try:
       with open(fname,'wb') as f:
@@ -170,7 +170,7 @@ class CLI(cmd.Cmd):
       self.modified = False
       return False
     except:
-      print 'Unable to pickle character'
+      print('Unable to pickle character')
 
 ############################ </DEV>
 
@@ -196,7 +196,7 @@ class CLI(cmd.Cmd):
     if '\n' in prompt:
       prompt = prompt.split('\n')
       while len(prompt)>1:
-        print prompt.pop(0)
+        print(prompt.pop(0))
       prompt = prompt[0]
     return prompt
 
@@ -254,7 +254,7 @@ class CLI(cmd.Cmd):
 
   def postcmd(self,stop,line):
 
-    print ''
+    print('')
     return stop
 
   def do_EOF(self,line):
@@ -268,26 +268,26 @@ class CLI(cmd.Cmd):
       func = self.exported[args[0]]
       if isinstance(func,dict):
         if len(args)<2 or args[1] not in func:
-          print '*** Unknown or missing sub-command'
+          print('*** Unknown or missing sub-command')
           return
         func = func[args[1]]
-      print self.get_sig(func)[0]
+      print(self.get_sig(func)[0])
     else:
       cmd.Cmd.do_help(self,' '.join(args))
 
   def do_load(self,args):
 
     if not args:
-      print 'Missing file name'
+      print('Missing file name')
     elif not self.overwrite():
       return
     elif not os.path.isfile(args[0]):
-      print 'Unable to read "%s"' % args[0]
+      print('Unable to read "%s"' % args[0])
     else:
       (c,errors) = char.Character.load(args[0])
       if errors:
-        print 'Failed to load "%s"' % args[0]
-        print '\n'.join(errors)
+        print('Failed to load "%s"' % args[0])
+        print('\n'.join(errors))
       else:
         self.unplug()
         self.plug(c)
@@ -298,12 +298,12 @@ class CLI(cmd.Cmd):
 
     fname = self.fname if not args else ' '.join(args)
     if not fname:
-      fname = raw_input('Enter a file name: ')
+      fname = input('Enter a file name: ')
     try:
       with open(fname,'a') as f:
         pass
     except:
-      print 'Unable to write to "%s"' % fname
+      print('Unable to write to "%s"' % fname)
       return
 
     self.char.save(fname)
@@ -321,7 +321,7 @@ class CLI(cmd.Cmd):
 
     if self.char is None or not self.modified:
       return True
-    choice = raw_input('\nSave changes to current char? (Y/n/c): ').lower()
+    choice = input('\nSave changes to current char? (Y/n/c): ').lower()
     if choice in ('','y','yes'):
       return self.do_save([])==False
     if choice in ('n','no'):
@@ -335,17 +335,17 @@ class CLI(cmd.Cmd):
       val = self.exported[args[0]]
       if isinstance(val,dict):
         if len(args)<2:
-          print 'Missing sub-command'
+          print('Missing sub-command')
           return
         elif args[1] in val:
           (func,args) = (val[args[1]],args[2:])
         else:
-          print 'Unknown sub-command "%s"' % args[1]
+          print('Unknown sub-command "%s"' % args[1])
           return
       else:
         (func,args) = (val,args[1:])
     else:
-      print 'Unknown command "%s"' % args[0]
+      print('Unknown command "%s"' % args[0])
       return
 
     try:
@@ -354,10 +354,10 @@ class CLI(cmd.Cmd):
     except:
       s = traceback.format_exc()
       self.last_trace = s.strip()
-      print '*** '+s.split('\n')[-2]
+      print('*** '+s.split('\n')[-2])
       return
     if result:
-      print result
+      print(result)
 
   def check_args(self,func,user_args):
 
@@ -423,5 +423,5 @@ if __name__=='__main__':
     if os.path.isfile(args[1]):
       fname = args[1]
     else:
-      print 'Unable to open "%s"' % args[1]
+      print('Unable to open "%s"' % args[1])
   main(fname)

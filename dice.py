@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import random
-from functools import total_ordering
+from functools import reduce,total_ordering
 
 @total_ordering
 class Dice(object):

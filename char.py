@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 ##### COMMANDS #####
 
 # get (stat|bonus|text) NAME[,NAME...]
@@ -95,6 +93,7 @@ import time,inspect
 from collections import OrderedDict
 
 from dice import Dice
+from functools import reduce
 
 class DuplicateError(Exception):
   pass
@@ -256,7 +255,7 @@ class Character(object):
     while count==0 or repeat:
       count += 1
 
-      s = raw_input(msg+': ').strip()
+      s = input(msg+': ').strip()
       if lower:
         s = s.lower()
 
@@ -273,7 +272,7 @@ class Character(object):
         try:
           s = parse(s)
         except ValueError as e:
-          print '*** %s: %s' % (e.__class__.__name__,e.message)
+          print('*** %s: %s' % (e.__class__.__name__,e.message))
           if repeat:
             continue
           else:
@@ -284,7 +283,7 @@ class Character(object):
       if valid(s):
         break
       else:
-        print '*** Invalid entry'
+        print('*** Invalid entry')
 
     return s
 
@@ -1427,7 +1426,7 @@ class Pathfinder(Character):
   def _set_size(self,size):
 
     size = size[0]
-    i = self.SIZE_NAMES.keys().index(size)
+    i = list(self.SIZE_NAMES.keys()).index(size)
     self.set_stat('size',self.SIZES[i],self.SIZE_NAMES[size])
 
   def dmg(self,damage,nonlethal=False):
@@ -1444,7 +1443,7 @@ class Pathfinder(Character):
       else:
         self.add_bonus('_damage',-damage,'hp')
       if damage>=50 and damage>=int(self._max_hp()/2):
-        print '!!! Massive damage'
+        print('!!! Massive damage')
 
   def heal(self,damage):
 
@@ -1484,7 +1483,7 @@ class Pathfinder(Character):
     if action not in actions:
       raise ValueError('invalid sub-command "%s"' % action)
 
-    name = name or self.SKILLS.keys()
+    name = name or list(self.SKILLS.keys())
     if not isinstance(name,list):
       name = [name]
     if action=='info':
@@ -1516,7 +1515,7 @@ class Pathfinder(Character):
       except Exception as e:
         result = '*** %s (%s) %s' % (e.__class__.__name__,n,e.message)
       if result:
-        print result
+        print(result)
 
   ##### OVERRIDES #####
 
@@ -1536,7 +1535,7 @@ class Pathfinder(Character):
       raise ValueError('invalid sub-command "%s"' % action)
 
     if action=='help':
-      print '(wiz) [all] (%s)' % ('|'.join(sorted(actions+standalone)))
+      print('(wiz) [all] (%s)' % ('|'.join(sorted(actions+standalone))))
 
     else:
       actions = actions if action=='all' else [action]
@@ -1544,7 +1543,7 @@ class Pathfinder(Character):
         for action in actions:
           action = getattr(self,'_wiz_'+action)
           if len(actions)>1:
-            print '\n=== %s' % action.__doc__
+            print('\n=== %s' % action.__doc__)
           try:
             action()
           except UserSkipException:
@@ -1566,7 +1565,7 @@ class Pathfinder(Character):
     """Race"""
 
     if self.texts['race'].text:
-      print "+++ WARNING: if you've already run this command don't re-run it"
+      print("+++ WARNING: if you've already run this command don't re-run it")
 
     race = self._input(
         'Enter race name',
@@ -1585,7 +1584,7 @@ class Pathfinder(Character):
 
     bonuses = info[self.RACE_INDEX.index('bonuses')]
     if len(bonuses):
-      print '--- racial bonuses'
+      print('--- racial bonuses')
     for bonus in bonuses:
       args = bonus[:3]+['racial']
       args[0] = '%s_%s' % (race,args[0])
@@ -1596,24 +1595,24 @@ class Pathfinder(Character):
         else:
           args += [s]
       self.add_bonus(*args)
-      print '  %s' % self.bonuses[args[0]]._str()
+      print('  %s' % self.bonuses[args[0]]._str())
 
     traits = info[self.RACE_INDEX.index('traits')]
     if traits:
       self.set_text('race_traits','\n'.join(traits))
-      print '--- all text race_traits'
+      print('--- all text race_traits')
       for t in traits:
-        print '  %s' % t
+        print('  %s' % t)
 
     manual = info[self.RACE_INDEX.index('manual')]
     for s in manual:
-      print '+++ NOTE: %s' % s
+      print('+++ NOTE: %s' % s)
 
   def _wiz_class(self):
     """Class skills, BAB, Saves"""
 
     if self.texts['class'].text:
-      print "+++ WARNING: if you've already run this command don't re-run it"
+      print("+++ WARNING: if you've already run this command don't re-run it")
 
     clas = self._input(
         'Enter class name',
@@ -1623,7 +1622,7 @@ class Pathfinder(Character):
     self.set_text('class',clas)
     info = self.CLASS_INFO[clas]
 
-    names = self.SKILLS.keys()
+    names = list(self.SKILLS.keys())
     one_hot = info[self.CLASS_INDEX.index('skills')]
     skills = []
     for (i,x) in enumerate(one_hot):
@@ -1631,11 +1630,11 @@ class Pathfinder(Character):
         skill = names[i]
         skills.append(skill)
         self.stat[skill].set_cskill()
-    print 'class skills: %s' % ','.join(skills)
+    print('class skills: %s' % ','.join(skills))
 
     prog = info[self.CLASS_INDEX.index('bab')]
     self.set_stat('bab','int(%s*$level)' % prog)
-    print 'bab progression: %s' % prog
+    print('bab progression: %s' % prog)
 
     mods = ('con','dex','wis')
     progs = info[self.CLASS_INDEX.index('saves')]
@@ -1647,13 +1646,13 @@ class Pathfinder(Character):
       base = self.CLASS_SAVES[prog].replace('x','$level')
       new = '$%s+%s' % (mod,base)
       self.set_stat(save,new,force=True)
-    print 'good saves: %s' % ','.join(good)
+    print('good saves: %s' % ','.join(good))
 
     mod = info[self.CLASS_INDEX.index('cast_mod')]
     if mod:
       self.set_stat('spell_mod','$'+mod)
       self.set_stat('spells_mod','#'+mod)
-      print 'casting mod: %s' % mod
+      print('casting mod: %s' % mod)
 
   def _wiz_abilities(self):
     """Ability scores"""
@@ -1676,12 +1675,12 @@ class Pathfinder(Character):
         adjust = (-2 if i==2 else 2)
         new = self.stats[a].value+adjust
         self.set_stat(a,new)
-        print ('+' if adjust>0 else '')+' '+a
+        print(('+' if adjust>0 else '')+' '+a)
 
   def _wiz_skill(self):
     """Skill ranks"""
 
-    print '+++ Max ranks: %s' % self.stats['level'].value
+    print('+++ Max ranks: %s' % self.stats['level'].value)
     self._inputs(
         [(  '%s (%s)' % (s,self.stats[s].ranks),
             s,

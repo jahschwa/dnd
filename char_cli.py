@@ -134,6 +134,11 @@ class CLI(cmd.Cmd):
 
     print(self.last_trace)
 
+  def do_args(self,args):
+    """[DEV] print args"""
+
+    print(args)
+
   def do_old_load(self,args):
 
     if not args:

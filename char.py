@@ -326,6 +326,11 @@ class Character(object):
         action(key,x)
 
   def search(self,name,ignore='_'):
+    """
+    search all objects for one with a matching name
+      - name (string) the search term
+      - [ignore = '_'] (string) exclude results starting with this string
+    """
 
     matches = []
     for (l,d) in self.letters.items():
@@ -336,6 +341,11 @@ class Character(object):
 
   # @raise KeyError if typ does not exist
   def get(self,typ,name):
+    """
+    show a summary of the requested field(s)
+      - typ (string) field type
+      - name (string,list) the field name(s)
+    """
 
     typ = typ if typ not in self.letters else self.letters[typ]
     if typ not in self.letters.values():
@@ -357,6 +367,11 @@ class Character(object):
   # @raise KeyError if typ does not exist
   # @raise KeyError if name does not exist
   def all(self,typ,name):
+    """
+    show detailed information about the requested field(s)
+      - typ (string) field type
+      - name (string,list) the field name(s)
+    """
 
     typ = typ if typ not in self.letters else self.letters[typ]
     if typ not in self.letters.values():
@@ -377,6 +392,16 @@ class Character(object):
 
   # @raise ValueError if name already exists
   def add_stat(self,name,formula='0',text='',updated=None):
+    """
+    add a new Stat
+      - name (string)
+      - [formula = '0'] (string) the formula for calculating its value
+        - reference other stats with '$' (e.g. '$strength')
+        - same as above but ignore any Bonuses with '#' (e.g. '#stength')
+        - anything legal in eval() is legal here
+      - [text = ''] (string)
+      - [updated = NOW] (int) time the stat was last updated (unix epoch)
+    """
 
     stat = Stat(name,formula,text,updated)
     self._add_stat(stat)
@@ -384,6 +409,10 @@ class Character(object):
   # @raise KeyError if name does not exist
   # @raise DependencyError if delete would break hierarchy
   def del_stat(self,name):
+    """
+    delete a Stat
+      - name (string)
+    """
 
     try:
       stat = self.stats[name]
@@ -395,6 +424,14 @@ class Character(object):
   # @raise KeyError if name does not exist
   # @raise FormulaError if formula contains errors
   def set_stat(self,name,formula=None,text=None,updated=None,force=False):
+    """
+    modify an existing Stat
+      - name (string)
+      - formula (string) see 'help add stat'
+      - [text = None] (string)
+      - [updated = None] (int)
+      - [force = False] (bool) ignore protected stats and force the update
+    """
 
     try:
       old = self.stats[name]
@@ -431,12 +468,26 @@ class Character(object):
 
   # @raise ValueError if name already exists
   def add_bonus(self,name,value,stats,typ=None,cond=None,text=None,active=True):
+    """
+    add a new Bonus
+      - name (string)
+      - value (int,Dice) the number/Dice to add to our stat(s)
+      - stats (string,list) the stat(s) this Bonus modifies
+      - [typ = 'none'] (string) the bonus type (e.g. 'armor')
+      - [text = ''] (string)
+      - [active = True] (bool)
+    """
 
     bonus = Bonus(name,Dice(value),stats,typ,cond,text,active)
     self._add_bonus(bonus)
 
   # @raise KeyError if name does not exist
   def set_bonus(self,name,value):
+    """
+    modify an existing Bonus
+      - name (string)
+      - value (int,Dice) the number/Dice to add to our stat(s)
+    """
 
     try:
       bonus = self.bonuses[name]
@@ -448,6 +499,10 @@ class Character(object):
 
   # @raise KeyError if name does not exist
   def del_bonus(self,name):
+    """
+    delete a Bonus
+      - name (string)
+    """
 
     try:
       self.bonuses[name].unplug()
@@ -464,11 +519,26 @@ class Character(object):
     self.effects[effect.name] = effect
 
   def add_effect(self,name,bonuses,duration=None,text=None,active=None):
+    """
+    add a new Effect
+      - name (string)
+      - bonuses (string,list) the bonuses created by this Effect
+      - [duration = None] (string) valid units: rd,min,hr,day (None = infinite)
+      - text (string) [None]
+      - [active = None] (bool) if not None, (de)activate all our bonuses
+    """
 
     effect = Effect(name,bonuses,Duration(duration,self),text,active)
     self._add_effect(effect)
 
   def set_effect(self,name,bonuses=None,duration=None):
+    """
+    modify an existing Effect
+      - name (string)
+      - [bonuses = None] (string,list)
+      - [duration = None] (string) see 'help add effect'
+        - None means don't update it, so use 'inf' to set an infinite duration
+    """
 
     effect = self.effects[name]
     bonuses = bonuses or effect.bonuses
@@ -490,12 +560,22 @@ class Character(object):
 
   # @raise ValueError if name already exists
   def add_text(self,name,text):
+    """
+    add a new Text blurb
+      - name (string)
+      - text (string)
+    """
 
     text = Text(name,text)
     self._add_text(text)
 
   # @raise KeyError if name does not exist
   def set_text(self,name,text):
+    """
+    modify an existing Text
+      - name (string)
+      - text (string)
+    """
 
     try:
       t = self.texts[name]
@@ -506,6 +586,10 @@ class Character(object):
 
   # @raise KeyError if name does not exist
   def del_text(self,name):
+    """
+    delete a Text blurb
+      - name (string)
+    """
 
     try:
       del self.texts[name]
@@ -514,6 +598,10 @@ class Character(object):
 
   # @raise KeyError if name does not exist
   def on(self,name):
+    """
+    activate a Bonus
+      - name (string)
+    """
 
     try:
       self.bonuses[name].on()
@@ -522,6 +610,10 @@ class Character(object):
 
   # @raise KeyError if name does not exist
   def off(self,name):
+    """
+    deactivate a Bonus
+      - name (string)
+    """
 
     try:
       self.bonuses[name].off()
@@ -530,13 +622,17 @@ class Character(object):
 
   # @raise KeyError if name does not exist
   def revert(self,name):
+    """
+    revert a bonus to its last state
+      - name (string)
+    """
 
     try:
       self.bonuses[name].revert()
     except KeyError:
       raise KeyError('unknwown bonus "%s"' % name)
 
-  def stacks(self,typ):
+  def _stacks(self,typ):
     return not self.BONUS_STACK or typ in self.BONUS_STACK
 
 class Field(object):
@@ -693,7 +789,7 @@ class Stat(Field):
       bonuses = [b.get_value() for b in bonuses if b.active]
       if not bonuses:
         continue
-      if self.char.stacks(typ):
+      if self.char._stacks(typ):
         self.value += sum(bonuses)
       else:
         self.value += max(bonuses)
@@ -1432,6 +1528,11 @@ class Pathfinder(Character):
     self.set_stat('size',self.SIZES[i],self.SIZE_NAMES[size])
 
   def dmg(self,damage,nonlethal=False):
+    """
+    take damage and update HP
+      - damage (int) amount of damage to take (positive)
+      - [nonlethal = False] (bool)
+    """
 
     damage = int(damage)
     if damage<=0:
@@ -1448,6 +1549,10 @@ class Pathfinder(Character):
         print('!!! Massive damage')
 
   def heal(self,damage):
+    """
+    heal damage and update HP
+      - damage (int) amount of damage to heal (positive)
+    """
 
     damage = int(damage)
     if damage<=0:
@@ -1480,6 +1585,20 @@ class Pathfinder(Character):
     return hp-self.bonuses['_damage'].value
 
   def skill(self,action='info',name=None,value=0):
+    """
+    manage skills
+      - action (string) see below
+      - [name = None] (string,list) the skill(s) to modify
+        - leaving this field blank acts on all skills
+      - [value = 0] (object)
+
+    actions:
+      - info [value = UNUSED] give some quick stats
+      - list [value = None] show summary text
+      - rank [value = 0] set skill ranks
+      - class [value = UNUSED] set as class skills
+      - unclass [value = UNUSED] set as not class skills
+    """
 
     actions = ['info','list','rank','class','unclass']
     if action not in actions:
@@ -1530,6 +1649,24 @@ class Pathfinder(Character):
   ##### SETUP WIZARD #####
 
   def wiz(self,action='help'):
+    """
+    character setup wizard for some automation
+      - action (string) see below
+
+    actions:
+      - all [N/A] execute each [ALL] action below in order
+      - level [ALL] set character level
+      - race [ALL] set race and add racial bonuses
+      - class [ALL] set class, some stats, and class skills
+      - abilities [ALL] set ability scores and racial adjustments
+      - skill [ALL] set skill ranks
+      - size [ONE] set size (e.g. medium)
+      - class_skill [ONE] set class skills
+
+    special inputs:
+      - skip - for the 'all' action, skip the current sub-action
+      - quit - exit the wizard making no further changes
+    """
 
     actions = ['level','race','class','abilities','skill']
     standalone = ['size','class_skill']

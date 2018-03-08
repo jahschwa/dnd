@@ -258,11 +258,13 @@ class CLI(cmd.Cmd):
     return stop
 
   def do_EOF(self,line):
+    """exit the CLI (prompts for save)"""
 
     if self.overwrite():
       return True
 
   def do_help(self,args):
+    """show help text for commands"""
 
     if args and args[0] in self.exported:
       func = self.exported[args[0]]
@@ -271,11 +273,24 @@ class CLI(cmd.Cmd):
           print('*** Unknown or missing sub-command')
           return
         func = func[args[1]]
-      print(self.get_sig(func)[0])
+      print('')
+      print('# '+self.get_sig(func)[0])
+      if func.__doc__:
+        lines = [x.rstrip() for x in func.__doc__.split('\n')]
+        while len(lines) and not lines[0].strip():
+          del lines[0]
+        while len(lines) and not lines[-1].strip():
+          del lines[-1]
+        leading = len(lines[0])-len(lines[0].lstrip())
+        if leading>0:
+          lines = [x[leading:] for x in lines]
+        print('#')
+        print('\n'.join(['# '+x for x in lines]))
     else:
       cmd.Cmd.do_help(self,' '.join(args))
 
   def do_load(self,args):
+    """load a character from a file"""
 
     if not args:
       print('Missing file name')
@@ -295,6 +310,7 @@ class CLI(cmd.Cmd):
         self.modified = False
 
   def do_save(self,args):
+    """save a character to a file"""
 
     fname = self.fname if not args else ' '.join(args)
     if not fname:
@@ -311,6 +327,7 @@ class CLI(cmd.Cmd):
     self.modified = False
 
   def do_close(self,args):
+    """close the current character (prompts for save)"""
 
     if not self.char:
       return
@@ -408,6 +425,7 @@ class CLI(cmd.Cmd):
     self.exported = {}
 
   def do_new(self,args):
+    """create a new character"""
 
     if not self.overwrite():
       return

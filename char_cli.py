@@ -99,7 +99,9 @@ def main(fname):
       pass
 
 class ArgsError(Exception):
-  pass
+  def __init__(self,sig,msg):
+    super(ArgsError,self).__init__(msg)
+    self.sig = sig
 
 class Prompt(object):
 
@@ -207,31 +209,41 @@ class CLI(cmd.Cmd):
 
   def parseline(self,line):
 
-    args = self.get_args(line)
+    (args,kwargs) = self.get_args(line)
     return (args[0] if args else '',args[1:],line)
 
   # @param args (str) a command string
   # @param lower (bool) [False] whether to lowercase everything
   # @return (list) space-separated args, without quotes commas create a list
-  def get_args(self,args,lower=False,split=True):
+  def get_args(self,line,lower=False,split=True):
     """get space-separated args accounting for quotes"""
 
-    l = []
+    args = []
+    kwargs = {}
     quote = False
     last_quoted = False
     to_lower = lower
     s = ''
-    for (i,c) in enumerate(args+' '):
+    for (i,c) in enumerate(line.strip()+' '):
 
       # separate on spaces unless inside quotes
-      if c==' ' or i==len(args):
+      if c==' ':
         if quote:
           s += c
         elif s:
-          if not last_quoted and split:
-            l.append(s.split(',') if ',' in s else s)
+          if not last_quoted and split and ',' in s:
+            x = s.split(',')
+            if '=' in x[0]:
+              (key,x[0]) = x[0].split('=')
+              kwargs[key] = x
+            else:
+              args.append(x)
           else:
-            l.append(s)
+            if '=' in s:
+              (key,x) = s.split('=')
+              kwargs[key] = x
+            else:
+              args.append(s)
           last_quoted = False
           s = ''
 
@@ -252,7 +264,7 @@ class CLI(cmd.Cmd):
         else:
           s += c
 
-    return l
+    return (args,kwargs)
 
   def emptyline(self):
     pass
@@ -280,6 +292,8 @@ class CLI(cmd.Cmd):
         func = func[args[1]]
       print('')
       print('# '+self.get_sig(func)[0])
+      if not func.__doc__:
+        func = getattr(super(self.char.__class__,self.char),func.__name__)
       if func.__doc__:
         lines = [x.rstrip() for x in func.__doc__.split('\n')]
         while len(lines) and not lines[0].strip():
@@ -352,7 +366,7 @@ class CLI(cmd.Cmd):
 
   def default(self,line):
 
-    args = self.get_args(line)
+    (args,kwargs) = self.get_args(line)
     if args[0] in self.exported:
       val = self.exported[args[0]]
       if isinstance(val,dict):
@@ -371,8 +385,12 @@ class CLI(cmd.Cmd):
       return
 
     try:
-      self.check_args(func,args)
-      result = func(*args)
+      self.check_args(func,args,kwargs)
+      result = func(*args,**kwargs)
+    except ArgsError as e:
+      print('*** ArgsError: %s' % e.args[0])
+      print('    %s' % e.sig)
+      return
     except:
       s = traceback.format_exc()
       self.last_trace = s.strip()
@@ -381,11 +399,18 @@ class CLI(cmd.Cmd):
     if result:
       print(result)
 
-  def check_args(self,func,user_args):
+  def check_args(self,func,user_args,user_kwargs):
 
     (sig,args,kwargs) = self.get_sig(func)
-    if len(user_args)<len(args) or len(user_args)>len(args+kwargs):
-      raise ArgsError(sig)
+    if len(user_args)<len(args):
+      raise ArgsError(sig,'missing required args')
+
+    if len(user_args)>len(args+kwargs):
+      raise ArgsError(sig,'too many args')
+
+    for key in user_kwargs:
+      if key not in kwargs:
+        raise ArgsError(sig,'unknown keyword "%s"' % key)
 
   def get_sig(self,func):
 

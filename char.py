@@ -74,6 +74,8 @@
 # TODO: incrementing? at least for skill ranks?
 # TODO: swap meaning of root and leaf
 # TODO: move Pathfinder to its own file
+# TODO: experience
+# TODO: limit skill ranks
 
 # Stat
 #   PathfinderSkill
@@ -272,7 +274,7 @@ class Character(object):
         try:
           s = parse(s)
         except ValueError as e:
-          print('*** %s: %s' % (e.__class__.__name__,e.message))
+          print('*** %s: %s' % (e.__class__.__name__,e.args[0]))
           if repeat:
             continue
           else:
@@ -1500,7 +1502,13 @@ class Pathfinder(Character):
           raise
 
   def _get_prompt(self):
-    return '[%s   %s]\n \___ ' % (self._get_name(),self._health())
+    return ('[ %s   %s   AC/To/FF: %s/%s/%s ]\n \___ ' % (
+        self._get_name(),
+        self._health(),
+        self.stats['ac'].value,
+        self.stats['ac_touch'].value,
+        self.stats['ac_ff'].value
+    ))
 
   def _get_status(self):
 
@@ -1574,8 +1582,11 @@ class Pathfinder(Character):
 
   def _health(self):
 
-    return ('HP: %s/%s   Nonlethal: %s   Death: %s   Status: %s'
-        % self._get_status())
+    (current,max_hp,nonlethal,death,status) = self._get_status()
+    non = '' if nonlethal==0 else '   Nonlethal: %s' % nonlethal
+    death = '' if current>0 else '   Death: %s' % death
+    status = '' if status=='up' else '   %s' % status
+    return 'HP: %s/%s%s%s%s' % (current,max_hp,non,death,status)
 
   def _max_hp(self):
 

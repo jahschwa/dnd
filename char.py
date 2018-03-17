@@ -56,26 +56,37 @@
 # used by |
 #    text |
 
-# TODO: disallow setting backend stats without additional flag
-# TODO: set should raise exception not return a boolean
-# TODO: conditional bonuses
-# TODO: consider another way for set_stat() to interact with plug/unplug?
-# TODO: decide what goes in here and what goes in the CLI
-# TODO: Bonus subclasses Stat but only allows root nodes? allows formulas
-# TODO: stat classes for setting (and getting?) e.g. abilities, skills
-# TODO: mark skills that can only be used if trained somehow?
-# TODO: common effect library for importing: feats, spells, conditions
-# TODO: pre-made/custom views (e.g. show all abilities)
-# TODO: regex searching
-# TODO: quote blocking
-# TODO: keyword acceptance e.g. "set stat text=blah"
-# TODO: strip tabs/newlines from input
-# TODO: report modification to the cli somehow (add,set,upgrade...) decorator?
-# TODO: incrementing? at least for skill ranks?
-# TODO: swap meaning of root and leaf
-# TODO: move Pathfinder to its own file
-# TODO: experience
-# TODO: limit skill ranks
+# [TODO] disallow setting backend stats without additional flag
+# [TODO] set should raise exception not return a boolean
+# [TODO] conditional bonuses
+# [TODO] consider another way for set_stat() to interact with plug/unplug?
+# [TODO] decide what goes in here and what goes in the CLI
+# [TODO] Bonus subclasses Stat but only allows root nodes? allows formulas
+# [TODO] stat classes for setting (and getting?) e.g. abilities, skills
+# [TODO] mark skills that can only be used if trained somehow?
+# [TODO] common effect library for importing: feats, spells, conditions
+# [TODO] pre-made/custom views (e.g. show all abilities)
+# [TODO] regex searching
+# [TODO] quote blocking
+# [TODO] keyword acceptance e.g. "set stat text=blah"
+# [TODO] strip tabs/newlines from input
+# [TODO] report modification to the cli somehow (add,set,upgrade...) decorator?
+# [TODO] incrementing? at least for skill ranks?
+# [TODO] swap meaning of root and leaf
+# [TODO] move Pathfinder to its own file
+# [TODO] experience
+# [TODO] limit skill ranks
+# [TODO] reset bonus original values dynamically to account for leveling up
+# [TODO] make durations mathy
+# [TODO] include effect name when printing bonuses or stats
+
+# [TODO] finish Effects (duration tracking, etc.)
+# [TODO] Item
+# [TODO] Weapon
+# [TODO] Armor
+# [TODO] Ability
+# [TODO] Spell
+# [TODO] Event
 
 # Stat
 #   PathfinderSkill
@@ -97,24 +108,32 @@ from collections import OrderedDict
 from dice import Dice
 from functools import reduce
 
-class DuplicateError(Exception):
+###############################################################################
+# Custom exceptions
+###############################################################################
+
+class CharError(Exception):
   pass
 
-class DependencyError(Exception):
+class DuplicateError(CharError):
   pass
 
-class FormulaError(Exception):
+class DependencyError(CharError):
   pass
 
-class ProtectedError(Exception):
+class FormulaError(CharError):
   pass
 
-class UserQuitException(Exception):
+class ProtectedError(CharError):
   pass
 
-class UserSkipException(Exception):
+class UserQuitException(CharError):
   pass
 
+class UserSkipException(CharError):
+  pass
+
+# the universe contains everything
 class Universe(dict):
   def __contains__(self,obj):
     return True
@@ -123,8 +142,13 @@ class Universe(dict):
   def get(self,x,d):
     return 'GALAXY'
 
+###############################################################################
+# Character class
+###############################################################################
+
 class Character(object):
 
+  # these are used to pre-populate a new character
   STATS = OrderedDict()
   BONUSES = OrderedDict()
   EFFECTS = OrderedDict()
@@ -133,77 +157,16 @@ class Character(object):
   EVENTS = OrderedDict()
   TEXTS = OrderedDict([('name','UNNAMED')])
 
+  # this makes logic in _setup() easier later
   BONUSS = BONUSES
   ABILITYS = ABILITIES
 
+  # all bonuses stack
   BONUS_STACK = Universe()
 
-  def __init__(self,setup=True,name=None):
-
-    self.name = name
-    self.stat = OrderedDict(); self.stats = self.stat
-    self.bonus = OrderedDict(); self.bonuses = self.bonus
-    self.effect = OrderedDict(); self.effects = self.effect
-    self.item = OrderedDict(); self.items = self.item
-    self.ability = OrderedDict(); self.abilities = self.ability
-    self.event = OrderedDict(); self.events = self.event
-    self.text = OrderedDict(); self.texts = self.text
-
-    self.letters = OrderedDict([
-      ('s','stat'),
-      ('b','bonus'),
-      ('e','effect'),
-      ('i','item'),
-      ('a','ability'),
-      ('v','event'),
-      ('t','text')])
-
-    self.export = ['search','on','off','revert','get','all']
-    self.export_prefix = ['add','set','del']
-    self.export_alias = {
-      '?':'search','+':'on','-':'off','r':'revert','g':'get','l':'all',
-      'a':'add','s':'set','d':'del'
-    }
-    self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sbt'} # TODO
-
-    if setup:
-      self._setup()
-
-  def _setup(self,ignore_dupes=False):
-
-    for typ in self.letters.values():
-      for (name,s) in getattr(self,typ.upper()+'S').items():
-        try:
-          getattr(self,'add_'+typ)(name,str(s))
-        except DuplicateError:
-          if ignore_dupes:
-            pass
-          else:
-            raise
-
-    if self.name:
-      self.set_text('name',self.name)
-
-  def _get_prompt(self):
-
-    s = len(self.stats)
-    b = len(self.bonuses)
-    a = len([x for x in self.bonuses.values() if x.active])
-    return '[ S:%s B:%s/%s ] ' % (s,a,b)
-
-  def _get_name(self):
-    return self.texts['name'].text
-
-  def save(self,name):
-
-    s = self.__class__.__name__+'\n'
-    for typ in self.letters.values():
-      for obj in getattr(self,typ).values():
-        s += ('%s\t' % obj.__class__.__name__)+'\t'.join(obj.save())+'\n'
-
-    with open(name,'w') as f:
-      f.write(s)
-
+  # load a character from file
+  # @param name (str) file path
+  # @return (Character)
   @staticmethod
   def load(name):
 
@@ -235,7 +198,7 @@ class Character(object):
             char._get_add_method(obj.__class__)(obj)
         except Exception as e:
           errors.append('line %s |   %s' % (i,' / '.join(line)))
-          errors.append('*** %s: %s' % (e.__class__.__name__,e.message))
+          errors.append('*** %s: %s' % (e.__class__.__name__,e.args[0]))
 
     # add any new stats added since the character was saved
     if not errors:
@@ -243,14 +206,114 @@ class Character(object):
 
     return (char,errors)
 
+  # @param setup (bool) [True] pre-populate character
+  # @param name (str) [None] character name (set to 'UNNAMED' if setup=True)
+  def __init__(self,setup=True,name=None):
+
+    self.name = name
+    self.stat = OrderedDict(); self.stats = self.stat
+    self.bonus = OrderedDict(); self.bonuses = self.bonus
+    self.effect = OrderedDict(); self.effects = self.effect
+    self.item = OrderedDict(); self.items = self.item
+    self.ability = OrderedDict(); self.abilities = self.ability
+    self.event = OrderedDict(); self.events = self.event
+    self.text = OrderedDict(); self.texts = self.text
+
+    # aliases for objects
+    self.letters = OrderedDict([
+      ('s','stat'),
+      ('b','bonus'),
+      ('e','effect'),
+      ('i','item'),
+      ('a','ability'),
+      ('v','event'),
+      ('t','text')])
+
+    # register commands
+    self.export = ['search','on','off','revert','get','all']
+    # register commands that have sub commands
+    self.export_prefix = ['add','set','del']
+    # register aliases
+    self.export_alias = {
+      '?':'search','+':'on','-':'off','r':'revert','g':'get','l':'all',
+      'a':'add','s':'set','d':'del'
+    }
+    # register sub command aliases
+    # [TODO] improve and include more objects
+    self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sbt'}
+
+    # this doesn't execute when loading from a file to prevent conflicts
+    if setup:
+      self._setup()
+
+  # pre-populate the character with the fields in STATS, BONUSES, etc.
+  # @param ignore_dupes (bool) [False] skip duplicates instead of crashing
+  # @raise DuplicateError if dupes encountered and ignore_dupes=False
+  def _setup(self,ignore_dupes=False):
+
+    for typ in self.letters.values():
+      for (name,s) in getattr(self,typ.upper()+'S').items():
+        try:
+          getattr(self,'add_'+typ)(name,str(s))
+        except DuplicateError:
+          if ignore_dupes:
+            pass
+          else:
+            raise
+
+    if self.name:
+      self.set_text('name',self.name)
+
+  # @return a command line prompt
+  def _get_prompt(self):
+
+    s = len(self.stats)
+    b = len(self.bonuses)
+    a = len([x for x in self.bonuses.values() if x.active])
+    return '[ S:%s B:%s/%s ] ' % (s,a,b)
+
+  # @return our character name
+  def _get_name(self):
+    return self.texts['name'].text
+
+  # @param cls (class) a sub-class of Field
+  # @return (func) the relevant "add" method for adding Fields during file load
+  # @raise KeyError
   def _get_add_method(self,cls):
 
     if cls.__name__.lower() in self.letters.values():
       return getattr(self,'_add_'+cls.__name__.lower())
+
+    # handle sub classes
     if cls.__bases__:
       return self._get_add_method(cls.__bases__[0])
+
     raise KeyError('failed to get add method')
 
+  # @param typ (str) the bonus type
+  # @return (bool) if bonuses of that type stack
+  def _stacks(self,typ):
+    return not self.BONUS_STACK or typ in self.BONUS_STACK
+
+###############################################################################
+# User input functions
+# [TODO] consider moving to char_cli somehow?
+###############################################################################
+
+  # get input from the user
+  # @param msg (str) prompt to print
+  # @param lower (bool) [True] lowercase user input
+  # @param parse (func) [None] parse function (e.g. int)
+  #   ValueError will be caught, others will crash
+  # @param valid (func) [None] validation function
+  #   accepts one parameter, returns True/False
+  # @param repeat (bool) [True] keep asking for input until parse/valid succeed
+  # @param blank (bool) [True] allow use to press enter without typing anything
+  #   this returns the empty string
+  # @return (object) the parsed & validated input
+  # @raise UserSkipException if user enters 'skip' or 'next'
+  # @raise UserQuitException if user enters 'quit' or 'exit'
+  # @raise ValueError if parsing raises an exception and repeat=False
   def _input(self,msg,lower=True,parse=None,valid=None,repeat=True,blank=True):
 
     count = 0
@@ -280,15 +343,20 @@ class Character(object):
           else:
             raise
 
-      if valid is None:
-        break
-      if valid(s):
+      if valid is None or valid(s):
         break
       else:
         print('*** Invalid entry')
 
     return s
 
+  # get and act on a bunch of user input
+  # @param actions (list of 3-tuple) actions to perform
+  #   #0 prompt (str) the prompt to display
+  #   #1 key (object) input to pass to the action
+  #   #2 action (func,None) function to execute, receives (key,USERINPUT)
+  # @param kwargs (dict) passed to _input()
+  # @raise UserQuitException if generated by _input()
   def _inputs(self,actions,**kwargs):
 
     for (prompt,key,action) in actions:
@@ -301,6 +369,14 @@ class Character(object):
       if action is not None:
         action(key,x)
 
+  # get a yes/no response from the user
+  # @param prompt (str) the prompt to display
+  # @param default (bool) [True] the default option
+  # @param blank (bool) [True] whether to accept a blank line
+  #   this returns the default
+  # @return (bool)
+  # @raise UserSkipException if user enters 'skip' or 'next'
+  # @raise UserQuitException if user enters 'quit' or 'exit'
   def _yn(self,prompt,default=True,blank=True):
 
     yes = ('y','yes','ok')
@@ -315,8 +391,15 @@ class Character(object):
     if response=='':
       return default
 
-    return response.lower() in yes
+    return response in yes
 
+  # get many yes/no responses and act on them
+  # @param actions (list of 3-tuple) actions to perform
+  #   #0 prompt (str) the prompt to display
+  #   #1 key (object) input to pass to the action
+  #   #2 action (func,None) function to execute, receives (key,USERINPUT)
+  # @param kwargs (dict) passed to _yn()
+  # @raise UserQuitException if generated by _yn()
   def _yns(self,actions,**kwargs):
 
     for (prompt,key,action) in actions:
@@ -326,6 +409,22 @@ class Character(object):
         break
       if action is not None:
         action(key,x)
+
+###############################################################################
+# User commands
+###############################################################################
+
+  # save this character
+  # @param name (str) file path
+  def save(self,name):
+
+    s = self.__class__.__name__+'\n'
+    for typ in self.letters.values():
+      for obj in getattr(self,typ).values():
+        s += ('%s\t' % obj.__class__.__name__)+'\t'.join(obj.save())+'\n'
+
+    with open(name,'w') as f:
+      f.write(s)
 
   def search(self,name,ignore='_'):
     """
@@ -366,8 +465,7 @@ class Character(object):
         results.append('unknown %s "%s"' % (typ,n))
     return '\n'.join(results)
 
-  # @raise KeyError if typ does not exist
-  # @raise KeyError if name does not exist
+  # @raise KeyError if typ or name do not exist
   def all(self,typ,name):
     """
     show detailed information about the requested field(s)
@@ -384,7 +482,8 @@ class Character(object):
     except AttributeError:
       raise KeyError('unknown %s "%s"' % (typ,name))
 
-  # @raise ValueError if name already exists
+  # @param stat (Stat) the Stat to add
+  # @raise DuplicateError if the name already exists
   def _add_stat(self,stat):
 
     if stat.name in self.stats:
@@ -392,7 +491,7 @@ class Character(object):
     stat.plug(self)
     self.stats[stat.name] = stat
 
-  # @raise ValueError if name already exists
+  # @raise DuplicateError if name already exists
   def add_stat(self,name,formula='0',text='',updated=None):
     """
     add a new Stat
@@ -446,6 +545,7 @@ class Character(object):
       if old.uses:
         raise ProtectedError('stat "%s" is not a root (use force)' % name)
 
+    # to preserve atomicity, copy the existing stat, modify it, then replug
     new = old.copy(text=text,formula=formula,updated=updated)
     new.usedby = set(old.usedby)
     if new.usedby:
@@ -460,7 +560,8 @@ class Character(object):
       self.stats[name] = old
       raise e
 
-  # @raise ValueError if name already exists
+  # @param bonus (Bonus) the Bonus to add
+  # @raise DuplicateError if the name already exists
   def _add_bonus(self,bonus):
 
     if bonus.name in self.bonuses:
@@ -468,7 +569,7 @@ class Character(object):
     bonus.plug(self)
     self.bonuses[bonus.name] = bonus
 
-  # @raise ValueError if name already exists
+  # @raise DuplicateError if name already exists
   def add_bonus(self,name,value,stats,typ=None,cond=None,text=None,active=True):
     """
     add a new Bonus
@@ -476,6 +577,7 @@ class Character(object):
       - value (int,Dice) the number/Dice to add to our stat(s)
       - stats (string,list) the stat(s) this Bonus modifies
       - [typ = 'none'] (string) the bonus type (e.g. 'armor')
+      - [cond = ''] (string) when this bonus applies if not all the time
       - [text = ''] (string)
       - [active = True] (bool)
     """
@@ -513,6 +615,8 @@ class Character(object):
 
     del self.bonuses[name]
 
+  # @param effect (Effect) the Effect to add
+  # @raise DuplicateError if the name already exists
   def _add_effect(self,effect):
 
     if effect.name in self.effects:
@@ -520,6 +624,7 @@ class Character(object):
     effect.plug(self)
     self.effects[effect.name] = effect
 
+  # @raise DuplicateError if name already exists
   def add_effect(self,name,bonuses,duration=None,text=None,active=None):
     """
     add a new Effect
@@ -533,6 +638,7 @@ class Character(object):
     effect = Effect(name,bonuses,Duration(duration,self),text,active)
     self._add_effect(effect)
 
+  # @raise KeyError if name does not exist
   def set_effect(self,name,bonuses=None,duration=None):
     """
     modify an existing Effect
@@ -554,13 +660,15 @@ class Character(object):
       self.effects[name] = effect
       raise e
 
+  # @param text (Text) the Text to add
+  # @raise DuplicateError if the name already exists
   def _add_text(self,text):
 
     if text.name in self.texts:
       raise DuplicateError('text "%s" already exists' % text.name)
     self.texts[text.name] = text
 
-  # @raise ValueError if name already exists
+  # @raise DuplicateError if name already exists
   def add_text(self,name,text):
     """
     add a new Text blurb
@@ -634,26 +742,25 @@ class Character(object):
     except KeyError:
       raise KeyError('unknwown bonus "%s"' % name)
 
-  def _stacks(self,typ):
-    return not self.BONUS_STACK or typ in self.BONUS_STACK
+###############################################################################
+# Field class
+#   - parent class for objects used by Characters
+#   - setting the FIELDS dict enables saving and loading in child classes
+#   - child classes should consider overriding everything except load/save
+###############################################################################
 
 class Field(object):
 
+  # this should be an OrderedDict of name:type where typ is one of:
+  #   str - no action taken
+  #   None - we will always pass None ignoring actual content
+  #   list - splits on commas
+  #   bool - compares against the string 'True'
   FIELDS = {}
 
-  def save(self):
-
-    result = []
-    for (field,typ) in self.FIELDS.items():
-      if typ is None:
-        continue
-      val = getattr(self,field)
-      if isinstance(val,list):
-        result.append(','.join([str(x) for x in val]))
-      else:
-        result.append(str(val))
-    return result
-
+  # parse an argument list into a (sub-classed) Field object
+  # @param fields (list of str) arguments to pass to the object __init__
+  # @return (object) an instance a Field sub-class
   @classmethod
   def load(cls,fields):
 
@@ -672,8 +779,59 @@ class Field(object):
       parsed.append(val)
     return cls(*parsed)
 
+  # calls str() on each field (or on each item if the field is a list)
+  # @return (list of str) fields to save
+  def save(self):
+
+    result = []
+    for (field,typ) in self.FIELDS.items():
+      if typ is None:
+        continue
+      val = getattr(self,field)
+      if isinstance(val,list):
+        result.append(','.join([str(x) for x in val]))
+      else:
+        result.append(str(val))
+    return result
+
+  # create variables and establish dependencies in a Character
+  # @param (Character) the character to plug into
+  def plug(self,char):
+    pass
+
+  # try to remove ourself from the Character, checking for dependency issues
+  # @raise DependencyError if other Fields depend on us
+  def unplug(self):
+    pass
+
+  # recalculate our value
+  def calc(self):
+    pass
+
+  # what to print for the "search" command
+  def str_search(self):
+    return str(self)
+
+  # what to print for the "all" command
+  def str_all(self):
+    return str(self)
+
+  # what to print in other cases, including the "get" command
+  def __str__(self):
+    return repr(self)
+
+  # this gets called in the interpreter, and for when in a collection
   def __repr__(self):
     return '<%s %s>' % (self.__class__.__name__,self.name)
+
+###############################################################################
+# Stat class
+#   - stat tracking and calculation via string formulas and eval()
+#   - stats are considered "root" nodes if their formula is static
+#   - or "leaf" nodes if no other stat depends on it
+#   - stats whose name begins with '_' are protected by default
+#   - stats can have Bonuses that affect their value
+###############################################################################
 
 class Stat(Field):
 
@@ -690,14 +848,30 @@ class Stat(Field):
       '#':'self.char.stats["%s"].normal',
   }
 
+  # @param name (str)
+  # @param formula (str) ['0'] will get passed to eval()
+  #   using $NAME refers to the value of the Stat by that name
+  #   using #NAME refers to the normal (no bonuses) value
+  #   using @NAME refers to an attribute of this Stat object
+  #   these can be wrapped in braces to prevent conflicts e.g. ${NAME}
+  # @param text (str) ['']
+  # @param bonuses (Bonus,list of Bonus) [None] bonuses affecting this stat
+  # @param protected (bool) [name.startswith('_')] if this stat is protected
+  # @param updated (float) [time.time()] when this Stat was updated
   def __init__(self,name,formula='0',text='',bonuses=None,protected=None,
       updated=None):
 
     self.char = None
     self.name = name
     self.text = text
+
+    # during plug() in self.formula we replace aliases with valid python code
+    # when displaying to the user or creating a new Stat we need the original
     self.formula = str(formula)
     self.original = self.formula
+
+    # this is a dict of type:list where the elements of the list are Bonus
+    # e.g. {"armor":[<Bonus mage_armor>,<Bonus shield>]}
     self.bonuses = bonuses or {}
     self.protected = name.startswith('_') if protected is None else protected
     self.updated = time.time() if updated is None else updated
@@ -709,12 +883,15 @@ class Stat(Field):
     self.root = True
     self.leaf = True
 
+    # overridden in sub-classes to specify additional fields to copy()
     self.COPY = []
 
+  # @raise FormulaError
   def plug(self,char):
 
     self.char = char
 
+    # iterate over each stat in the character and replace matching #/$ aliases
     s = self.formula
     usedby = set()
     for name in char.stats:
@@ -727,15 +904,20 @@ class Stat(Field):
           self.leaf = False
           usedby.add(char.stats[name])
 
+    # iterate over our attributes and replace matching @ aliases
     for name in dir(self):
       s = s.replace('@'+name,'self.'+name)
       s = s.replace('@{'+name+'}','self.'+name)
 
+    # if any aliases were invalid or misspelled, we'll have "#NAME" left which
+    # will throw an exception in the eval()
+    # of course can also throw syntax errors if something else is wrong
     try:
       eval(s)
     except Exception as e:
       raise FormulaError('%s in "%s"' % (e.__class__.__name__,s))
 
+    # add ourselves as a dependant to stats that are in our formula
     for stat in usedby:
       stat.usedby.add(self.name)
       stat.root = False
@@ -743,6 +925,11 @@ class Stat(Field):
     self.formula = s
     self.calc()
 
+  # remove this stat from its character if possible
+  # @param force (bool) [False] ignore dependency issues for this stat
+  # @param recursive (bool) [False] remove all our dependants as well
+  # @raise RuntimeError if we don't have a character
+  # @raise DependencyError
   def unplug(self,force=False,recursive=False):
 
     if not self.char:
@@ -751,6 +938,7 @@ class Stat(Field):
     if self.usedby and not force and not recursive:
       raise DependencyError('still usedby: '+','.join(self.usedby))
 
+    # unplug our dependants if requested
     if recursive:
       for name in self.usedby:
         stat = self.char.stats[name]
@@ -770,6 +958,9 @@ class Stat(Field):
     self.leaf = True
     self.char = None
 
+  # convenience method that sets self.formula and self.original
+  # @param s (str) formula
+  # @raise RuntimeError if we're already plugged in to a character
   def set_formula(self,s):
 
     if self.char:
@@ -778,14 +969,18 @@ class Stat(Field):
     self.formula = s
     self.original = s
 
+  # @raise RuntimeError if we don't have a character
   def calc(self):
 
     if not self.char:
       raise RuntimeError('plug() must be called before calc()')
 
+    # evaluate our formula without bonuses
     old_v = self.value
     old_n = self.normal
     self.normal = eval(self.formula.replace('.value','.normal'))
+
+    # evaluate our formula with bonuses
     self.value = eval(self.formula)
     for (typ,bonuses) in self.bonuses.items():
       bonuses = [b.get_value() for b in bonuses if b.active]
@@ -795,11 +990,15 @@ class Stat(Field):
         self.value += sum(bonuses)
       else:
         self.value += max(bonuses)
+
+    # if we changed, bubble the calc() up through our dependants
     if old_v!=self.value or old_n!=self.normal:
       for stat in self.usedby:
         stat = self.char.stats[stat]
         stat.calc()
 
+  # add a bonus to this stat that will affect its value
+  # @param bonus (Bonus) the Bonus to add
   def add_bonus(self,bonus):
 
     typ = bonus.typ
@@ -808,6 +1007,9 @@ class Stat(Field):
     else:
       self.bonuses[typ] = [bonus]
 
+  # remove a bonus from this stat
+  # @param bonus (Bonus) the Bonus to remove
+  # [TODO] raise a KeyError or return a bool?
   def del_bonus(self,bonus):
 
     typ = bonus.typ
@@ -815,6 +1017,10 @@ class Stat(Field):
     if not self.bonuses[typ]:
       del self.bonuses[typ]
 
+  # return all bonuses that can affect this stat, including from dependencies
+  # @return (2-tuple)
+  #   #0 (list of Bonus) permanent bonuses
+  #   #1 (list of Bonus) conditional bonuses
   def get_bonuses(self):
 
     bonuses = []
@@ -826,6 +1032,7 @@ class Stat(Field):
         else:
           bonuses.append((self.name,b))
 
+    # recurse over dependencies
     for stat in self.uses:
       (b,c) = self.char.stats[stat].get_bonuses()
       bonuses += b
@@ -833,6 +1040,9 @@ class Stat(Field):
 
     return (bonuses,conds)
 
+  # copy this Stat into a new object with specified changes
+  # @param kwargs (dict) fields to update
+  # @return (Stat) the copy
   def copy(self,**kwargs):
 
     a = []
@@ -841,18 +1051,27 @@ class Stat(Field):
     formula = kwargs.get('formula',self.original)
     a.insert(1,formula)
 
+    # sub-classes of Stat can specify additional fields to copy
     k = {}
     for var in self.COPY:
       k[var] = kwargs.get(var,getattr(self,var))
 
     return self.__class__(*a,**k)
 
+  # looks like: rl
+  #   r (root) our formula has no dependencies
+  #   l (leaf) no other stat depends on us
+  # @return (str)
   def _str_flags(self):
 
     root = '-r'[self.root]
     leaf = '-l'[self.leaf]
     return '%s%s' % (root,leaf)
 
+  # looks like: rl 999 NAME (b:5/10 ?:0/5)
+  # followed by conditional bonuses indented on new lines
+  # @param cond_bonuses (bool) [False] whether to print conditional bonuses
+  # @return (str)
   def _str(self,cond_bonuses=False):
 
     flags = self._str_flags()
@@ -870,17 +1089,25 @@ class Stat(Field):
       bons = ''.join(['\n  %s'%b[1]._str(stat=False) for b in conds])
     return '%s %3s %s (%s)%s' % (flags,self.value,self.name,stats,bons)
 
+  # don't print conditional bonuses
+  # @return (str)
   def str_search(self):
     return self._str()
 
+  # do print conditional bonuses
+  # @return (str)
   def __str__(self):
     return self._str(True)
 
+  # @return (str)
   def str_all(self):
 
     l =     ['  value | %s' % self.value]
     l.append('formula | %s' % self.original)
     x = []
+
+    # each bonus gets its own line
+    # if the bonus is on one of our dependencies, include its name
     (bonuses,conds) = self.get_bonuses()
     for (stat,bonus) in bonuses:
       name = '' if stat==self.name else '<%s> ' % stat
@@ -891,11 +1118,23 @@ class Stat(Field):
       name = '' if stat==self.name else '<%s> ' % stat
       x +=  [' bonus? | %s%s' % (name,bonus._str(stat=False))]
     l.extend(sorted(x))
+
     l.append(' normal | %s' % self.normal)
     l.append('   uses | %s' % ','.join(sorted(self.uses)))
     l.append('used by | %s' % ','.join(sorted(self.usedby)))
     l.append('   text | %s' % self.text)
     return '\n'.join(l)
+
+###############################################################################
+# Bonus class
+#   - bonuses add a number (or Dice) to a stat or item
+#   - they can be turned on and off
+#   - they can be conditional
+#   - stats are considered "root" nodes if their formula is static
+#   - or "leaf" nodes if no other stat depends on it
+#   - stats whose name begins with '_' are protected by default
+#   - stats can have Bonuses that affect their value
+###############################################################################
 
 class Bonus(Field):
 
@@ -909,6 +1148,13 @@ class Bonus(Field):
       ('active',bool)
   ])
 
+  # @param name (str)
+  # @param value (int,Dice) the value to add to our stats
+  # @param stats (str,list of str) names of stats that we affect
+  # @param typ (str) ['none'] our type e.g. armor, dodge, morale
+  # @param cond (str) [''] when this bonus applies if not all the time
+  # @param text (str) ['']
+  # @param active (bool) [not cond] whether we're "on" and modifying stats
   def __init__(self,name,value,stats,typ=None,cond=None,text=None,active=True):
 
     self.name = name
@@ -920,11 +1166,14 @@ class Bonus(Field):
     self.condition = cond or ''
 
     self.char = None
-    self.usedby = set()
-    self.last = active
+    self.usedby = set() # this will contain Effects
+    self.last = active # remember the state we're in before a toggle
 
+  # @param char (Character)
+  # @raise ValueError if our type isn't in our Character
   def plug(self,char):
 
+    # I'd rather have this in __init__ but we don't have a char at that point
     if char.BONUS_TYPES and self.typ not in char.BONUS_TYPES:
       raise ValueError('invalid bonus type "%s"' % self.typ)
 
@@ -934,6 +1183,7 @@ class Bonus(Field):
       stat.calc()
     self.char = char
 
+    # some bonuses should never be turned off
     if not self.condition and self.typ in self.char.BONUS_PERM:
       self.active = True
 
@@ -948,6 +1198,7 @@ class Bonus(Field):
       stat.calc()
     self.char = None
 
+  # @return (int) the value of this bonus
   def get_value(self):
     return self.value
 
@@ -959,18 +1210,25 @@ class Bonus(Field):
   def on(self):
     self.toggle(True)
 
+  # @param force (bool) [False] turn off even if we belong to an active Effect
   def off(self,force=False):
+
+    # if we belong to an Effect and it is active, we should stay on
     if force or not reduce(lambda a,b:a or b.is_active(),self.usedby,False):
       self.toggle(False)
 
+  # @param new (bool) the new state; could be the same as our old state
   def toggle(self,new):
 
+    # some bonuses should never be turned off
     if not self.condition and self.typ in self.char.BONUS_PERM:
       return
     self.last = self.active
     self.active = new
     self.calc()
 
+  # this is planned to be used for the "with" conditional which hasn't been
+  # implemented yet e.g. "get ac with mage_armor" / "get ac without mage_armor"
   def revert(self):
 
     if self.active==self.last:
@@ -978,6 +1236,11 @@ class Bonus(Field):
     self.active = self.last
     self.calc()
 
+  # looks like: [+] NAME VALUE STATS (type)
+  # conditional: [-] NAME VALUE STATS (type) ? CONDITION
+  # @param name (bool) [True] print our name
+  # @param stat (bool) [True] print the stats we affect
+  # @return (str)
   def _str(self,name=True,stat=True):
 
     (n,s) = ('','')
@@ -990,12 +1253,11 @@ class Bonus(Field):
     cond = '' if not self.condition else ' ? %s' % self.condition
     return '[%s]%s %s%s%s (%s)%s' % (act,n,sign,self.get_value(),s,self.typ,cond)
 
-  def str_search(self):
-    return str(self)
-
+  # @return (str)
   def __str__(self):
     return self._str()
 
+  # @return (str)
   def str_all(self):
 
     l =     ['  value | %s' % self.get_value()]
@@ -1006,6 +1268,13 @@ class Bonus(Field):
     l.append('conditn | %s' % self.condition)
     l.append('   text | %s' % self.text)
     return '\n'.join(l)
+
+###############################################################################
+# Duration class
+#   - tracks a duration e.g. 1 round, 2 hours, 5 days
+#   - can also be infinite
+#   - can be based on $level or $caster_level e.g. 1/CL 1mi/2CL
+###############################################################################
 
 class Duration(object):
 
@@ -1024,6 +1293,8 @@ class Duration(object):
 
   NAMES = [(5259600,'yr'),(14400,'day'),(600,'hr'),(10,'min'),(1,'rd')]
 
+  # @param s (str)
+  # @return (bool) whether the input string is an int
   @staticmethod
   def is_int(s):
 
@@ -1033,6 +1304,8 @@ class Duration(object):
     except:
       return False
 
+  # @param s (str) unit name
+  # @return (int) the corresponding multiplier for conversion to rounds
   @staticmethod
   def get_mult(s):
 
@@ -1042,6 +1315,10 @@ class Duration(object):
 
     raise KeyError('unknown unit "%s"' % s)
 
+  # @param s (str) one duration text
+  # @return (2-tuple)
+  #   #0 (str) the number
+  #   #1 (str) unit
   @staticmethod
   def split_unit(s):
 
@@ -1050,6 +1327,8 @@ class Duration(object):
       i += 1
     return (s[:i] or '1',s[i:])
 
+  # @param s (str) full duration e.g. 1+1/CL
+  # @return (str) input converted to valid python expression to be eval()
   @staticmethod
   def to_rds(s):
 
@@ -1081,22 +1360,34 @@ class Duration(object):
 
     return '+'.join(rds)
 
+  # @param s (str) text to parse
+  # @param char (Character)
+  # @return (int) number of rounds
+  # @raise ValueError if we need a Character but don't have one
   @staticmethod
   def parse(s,char):
 
     s = Duration.to_rds(s)
+
+    # expand $level and $caster_level
     for unit in Duration.UNITS.values():
       if isinstance(unit,str) and unit.startswith('$'):
         s = s.replace(unit,'char.stats["%s"].value' % unit[1:])
     if 'char.stats' in s and not char:
       raise ValueError('string references Stats but missing Character')
-    return eval(s)
 
+    return (s,eval(s))
+
+  # @param dur (str) [None] the duration text to parse (None = infinite)
+  # @param char (Character) [None]
   def __init__(self,dur=None,char=None):
 
-    self.original = Duration.parse(dur,char)
+    (self.raw,self.original) = Duration.parse(dur,char)
     self.rounds = self.original
 
+  # @param dur (int,Duration) [1] value to subtract from remaining time
+  # @return (bool) True if this Duration has expired
+  # @raise TypeErrpr on dur
   def advance(self,dur=1):
 
     if isinstance(dur,Duration):
@@ -1109,6 +1400,7 @@ class Duration(object):
     self.rounds = max(0,self.rounds-dur)
     return self.expired()
 
+  # @return (bool) if we're expired
   def expired(self):
 
     return self.rounds==0
@@ -1117,6 +1409,8 @@ class Duration(object):
 
     self.rounds = self.original
 
+  # decompose into sum of years, days, hours, minutes, rounds
+  # @return (str)
   def __str__(self):
 
     if self.rounds==Duration.INF:
@@ -1130,8 +1424,23 @@ class Duration(object):
         x = x%num
     return '+'.join(s)
 
+###############################################################################
+# Effect class
+#   - links a Duration to one or more bonuses
+#   - the same Bonus object can be used by multiple Effects
+#   - turning an Effect on/off intelligently turns on/off its Bonuses
+###############################################################################
+
 class Effect(Field):
 
+  # @param name (str)
+  # @param bonuses (str,list of str) bonuses conferred by this Effect
+  # @param duration (Duration) [None] defaults to infinite
+  # @param text (str) [None]
+  # @param active (None,bool) whether this Effect is active
+  #   if bool, our bonuses will get toggled; if None they won't
+  #
+  # @rase TypeError on duration
   def __init__(self,name,bonuses,duration=None,text=None,active=None):
 
     self.name = name
@@ -1147,6 +1456,7 @@ class Effect(Field):
       raise TypeError('duration must be Duration not "%s"'
           % self.duration.__class__.__name__)
 
+  # @param char (Character)
   def plug(self,char):
 
     for name in self.bonuses:
@@ -1159,6 +1469,7 @@ class Effect(Field):
           bonus.off()
     self.char = char
 
+  # @raise RuntimeError if plug() wasn't called first
   def unplug(self):
 
     if not self.char:
@@ -1170,11 +1481,12 @@ class Effect(Field):
       bonus.off()
     self.char = None
 
+  # @return (bool) if not manually set, tracks duration
   def is_active(self):
 
     if self.active is not None:
       return self.active
-    return self.duration.rounds!=0
+    return not self.duration.expired()
 
   def on(self):
     self.toggle(True)
@@ -1182,6 +1494,7 @@ class Effect(Field):
   def off(self):
     self.toggle(False)
 
+  # @param new (bool)
   def toggle(self,new):
 
     self.last = self.active
@@ -1189,12 +1502,16 @@ class Effect(Field):
     for name in self.bonuses:
       self.char.bonuses[name].toggle(new)
 
+  # see Bonus.revert()
   def revert(self):
 
     self.active = self.last
     for name in self.bonuses:
       self.char.bonuses[name].revert()
 
+  # looks like: {+} NAME DURATION BONUSES
+  # can also start with {-} or {?}
+  # @return (str)
   def __str__(self):
 
     actives = [b.active for b in self.bonuses]
@@ -1205,11 +1522,9 @@ class Effect(Field):
     else:
       act = '-'
     names = [b.name for b in self.bonuses]
-    return '%s %s %s (%s)' % (act,self.name,self.duration,','.join(names))
+    return '{%s} %s %s (%s)' % (act,self.name,self.duration,','.join(names))
 
-  def str_search(self):
-    return str(self)
-
+  # @return (str)
   def str_all(self):
 
     l =      ['duration | %s' % self.duration]
@@ -1222,6 +1537,11 @@ class Effect(Field):
     l.append( '    text | '+self.text)
     return '\n'.join(l)
 
+###############################################################################
+# Text class
+#   - supports newlines via the 2 literal characters '\n'
+###############################################################################
+
 class Text(Field):
 
   FIELDS = OrderedDict([
@@ -1229,16 +1549,21 @@ class Text(Field):
       ('text',str),
   ])
 
+  # @param name (str)
+  # @param text (str)
   def __init__(self,name,text):
 
     self.name = name
     self.set(text)
 
+  # @param text (str)
   def set(self,text):
 
+    # we store newlines internally as '\' + 'n' for ease of saving
     text = text or ''
     self.text = text.strip().replace('\n','\\n')
 
+  # @return (str) truncated to 50 characters and replacing newlines with '|'
   def __str__(self):
 
     text = '[BLANK]' if not self.text else self.text.replace('\\n',' | ')
@@ -1247,13 +1572,16 @@ class Text(Field):
       (text,ellip) = (text[:50],'...')
     return '%s: %s%s' % (self.name,text,ellip)
 
-  def str_search(self):
-    return str(self)
-
+  # @return (str) full text with real newlines
   def str_all(self):
 
     text = '[BLANK]' if not self.text else self.text
     return '--- %s\n%s' % (self.name,text.replace('\\n','\n'))
+
+###############################################################################
+# Event class
+#   - WIP
+###############################################################################
 
 class Event(object):
 
@@ -1262,6 +1590,10 @@ class Event(object):
   def __init__(self):
     raise NotImplementedError
 
+###############################################################################
+# Pathfinder character class
+#   - includes a setup wizard via the "wiz" command
+#   - new class PathfinderSkill subclasses Stat
 ###############################################################################
 
 class Pathfinder(Character):
@@ -1478,16 +1810,21 @@ class Pathfinder(Character):
 
   CLASS_SAVES = ['int(x/3)','2+int(x/2)','int((x+1)/3)','1+int((x-1)/2)']
 
-  # TODO: conditional jump modifier based on move speed
-  # TODO: craft, profession, perform
-  # TODO: class skills
-  # TODO: max_dex
+  # [TODO] conditional jump modifier based on move speed
+  # [TODO] craft, profession, perform
+  # [TODO] class skills
+  # [TODO] max_dex
+  # [TODO] consider using _base_reflex etc.
 
+  # @param args (list) passed to Character
+  # @param kwargs (dict) passed to Character
   def __init__(self,*args,**kwargs):
 
     super(Pathfinder,self).__init__(*args,**kwargs)
     self.export += ['dmg','heal','skill','wiz']
 
+  # include skills in the setup method
+  # see Character._setup()
   def _setup(self,ignore_dupes=False):
 
     super(Pathfinder,self)._setup(ignore_dupes)
@@ -1501,6 +1838,8 @@ class Pathfinder(Character):
         else:
           raise
 
+  # include hp, status, ac
+  # @return (str)
   def _get_prompt(self):
     return ('[ %s   %s   AC/To/FF: %s/%s/%s ]\n \___ ' % (
         self._get_name(),
@@ -1510,6 +1849,20 @@ class Pathfinder(Character):
         self.stats['ac_ff'].value
     ))
 
+  # @return (int) our maximum hp (including bonuses except for _damage)
+  def _max_hp(self):
+
+    hp = self.stats['hp'].value
+    if '_damage' not in self.bonuses:
+      return hp
+    return hp-self.bonuses['_damage'].value
+
+  # @return (5-tuple)
+  #   #0 (int) current hp
+  #   #1 (int) max hp
+  #   #2 (int) nonlethal damage
+  #   #3 (int) the hp value when we die
+  #   #4 (str) one of: up,DEAD,DYING,STAGGERED,UNCON
   def _get_status(self):
 
     current = self.stats['hp'].value
@@ -1529,12 +1882,29 @@ class Pathfinder(Character):
 
     return (current,max_hp,nonlethal,death,status)
 
+  # @return (str) hp and status info
+  def _health(self):
+
+    (current,max_hp,nonlethal,death,status) = self._get_status()
+    non = '' if nonlethal==0 else '   Nonlethal: %s' % nonlethal
+    death = '' if current>0 else '   Death: %s' % death
+    status = '' if status=='up' else '   %s' % status
+    return 'HP: %s/%s%s%s%s' % (current,max_hp,non,death,status)
+
+  # set our size modifier and text
+  # @param size (str) first letter or whole word of the standard sizes:
+  #   fine,diminutive,tiny,small,medium,large,huge,gargantuan,colossal
   def _set_size(self,size):
 
-    size = size[0]
+    size = size[0].lower()
     i = list(self.SIZE_NAMES.keys()).index(size)
     self.set_stat('size',self.SIZES[i],self.SIZE_NAMES[size])
 
+###############################################################################
+# User commands
+###############################################################################
+
+  # [TODO] consider making massive damage an Event for consistency
   def dmg(self,damage,nonlethal=False):
     """
     take damage and update HP
@@ -1579,21 +1949,6 @@ class Pathfinder(Character):
         self.del_bonus('_damage')
     if nonlethal:
       self.set_stat('nonlethal',self.stats['nonlethal'].value-nonlethal)
-
-  def _health(self):
-
-    (current,max_hp,nonlethal,death,status) = self._get_status()
-    non = '' if nonlethal==0 else '   Nonlethal: %s' % nonlethal
-    death = '' if current>0 else '   Death: %s' % death
-    status = '' if status=='up' else '   %s' % status
-    return 'HP: %s/%s%s%s%s' % (current,max_hp,non,death,status)
-
-  def _max_hp(self):
-
-    hp = self.stats['hp'].value
-    if '_damage' not in self.bonuses:
-      return hp
-    return hp-self.bonuses['_damage'].value
 
   def skill(self,action='info',name=None,value=0):
     """
@@ -1645,11 +2000,13 @@ class Pathfinder(Character):
       try:
         result = func(n)
       except Exception as e:
-        result = '*** %s (%s) %s' % (e.__class__.__name__,n,e.message)
+        result = '*** %s (%s) %s' % (e.__class__.__name__,n,e.args[0])
       if result:
         print(result)
 
-  ##### OVERRIDES #####
+###############################################################################
+# Overrides
+###############################################################################
 
   def add_bonus(self,name,value,stats,typ=None,cond=None,text=None,active=True):
 
@@ -1657,7 +2014,9 @@ class Pathfinder(Character):
       stats = self.AC_BONUS.get(typ,'_ac_misc')
     super(Pathfinder,self).add_bonus(name,value,stats,typ,cond,text,active)
 
-  ##### SETUP WIZARD #####
+###############################################################################
+# Setup wizard
+###############################################################################
 
   def wiz(self,action='help'):
     """
@@ -1859,7 +2218,10 @@ class Pathfinder(Character):
         ) for s in self.SKILLS]
     )
 
-  ##### SKILL CLASS #####
+###############################################################################
+# PathfinderSkill class
+#   - subclasses Stat
+###############################################################################
 
 class PathfinderSkill(Stat):
 
@@ -1868,6 +2230,9 @@ class PathfinderSkill(Stat):
       [('ranks',int),('class_skill',bool)]
   )
 
+  # the first 6 args get passed to Stat
+  # @param ranks (int) [0] skill ranks
+  # @param class_skill (bool) [False]
   def __init__(self,*args,**kwargs):
 
     mine = list(args)[6:]
@@ -1879,23 +2244,34 @@ class PathfinderSkill(Stat):
       self.class_skill = mine.pop(0)
     else:
       self.class_skill = kwargs.pop('clas',False)
+
+    # Stat.__init__() with correct args
     super(PathfinderSkill,self).__init__(*args[:6],**kwargs)
 
     f = '+@ranks+(3 if @class_skill and @ranks else 0)'
     if '$dex' in self.original or '$str' in self.original:
       f += '+${acp}'
+
+    # we need a check here so we don't double up on the +3 class skills when
+    # loading from a file
+    # [TODO] consider a cleaner way of controlling this
     if f not in self.formula:
       self.set_formula(self.formula+f)
 
     self.trained_only = False
 
+    # needed for Stat.copy()
     self.COPY += ['ranks','class_skill']
 
+  # @param new (bool) [True]
   def set_cskill(self,new=True):
 
     self.class_skill = new
     self.calc()
 
+  # @param value (int)
+  # @raise TypeError on value
+  # @raise ValueError if value<0 or value>level
   def set_ranks(self,value):
 
     if not isinstance(value,int):
@@ -1911,21 +2287,28 @@ class PathfinderSkill(Stat):
     self.ranks = value
     self.calc()
 
+  # @param char (Character)
   def plug(self,char):
 
     super(PathfinderSkill,self).plug(char)
 
+    # determine if we're trained only or not
     for skill in self.char.SKILLS_TRAINED_ONLY:
       if self.name.startswith(skill):
         self.trained_only = True
         break
 
+  # looks like: c!
+  #   c (class_skill)
+  #   ! OR t (trained_only) based on ranks>0
+  # @return (str)
   def _str_flags(self):
 
     cs = '-c'[self.class_skill]
     tr = ['-!'[self.trained_only],'t'][self.ranks>0]
     return '%s%s' % (cs,tr)
 
+  # @return (str)
   def str_all(self):
 
     s = super(PathfinderSkill,self).str_all()

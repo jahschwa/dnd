@@ -80,12 +80,16 @@
 # [TODO] better exception messages, especially for num args
 # [TODO] dice roller
 # [TODO] custom aliases?
+# [TODO] actual modificaion tracking for save prompting
 
 import sys,os,pickle,cmd,inspect,traceback
 
 import char
 
-def main(fname):
+# keep running forever unless we get EOF from the CLI (i.e. a clean return)
+# if we get a KeyboardInterrupt resume the loop
+# @param fname (None,str) [None] the file to open
+def main(fname=None):
 
   cli = CLI(fname)
   run = True
@@ -98,18 +102,35 @@ def main(fname):
       print('use Ctrl+D / EOF to exit')
       pass
 
+# thrown when the user passes non-matching arguments to a command
+# @param sig (str) the signature of the target command
+# @param msg (str) error message
 class ArgsError(Exception):
   def __init__(self,sig,msg):
     super(ArgsError,self).__init__(msg)
     self.sig = sig
 
+# the Cmd class expects a static string but let's bootstrap it to be dynamic
 class Prompt(object):
 
+  # @param func (func) the function to generate the prompt
   def __init__(self,func):
     self.func = func
 
+  # the Cmd class just calls a print, so we can trick it with this override
+  # @return (str)
   def __str__(self):
     return str(self.func())
+
+###############################################################################
+# CLI class
+#   - does alot of customization to the base cmd.Cmd
+#   - dynamically loads commands from a Character
+#   - advanced argument parsing
+#     - quote blocking
+#     - creates lists from any arg with commas that wasn't quoted
+#     - keyword args e.g. "text=foo"
+###############################################################################
 
 class CLI(cmd.Cmd):
 
@@ -181,6 +202,7 @@ class CLI(cmd.Cmd):
 
 ############################ </DEV>
 
+  # @param fname (None,str) file name to load if not None
   def __init__(self,fname):
 
     cmd.Cmd.__init__(self)
@@ -194,12 +216,17 @@ class CLI(cmd.Cmd):
     if fname:
       self.do_load([fname])
 
+  # we expect this to get overriden by our Character
+  # @return (str)
   def get_prompt(self):
 
     if not self.char:
       return '[ --- none --- ] '
 
     prompt = self.char._get_prompt()
+
+    # the readline library doesn't seem to like prompts containing newlines
+    # so print them manually and only return the final line to our parent
     if '\n' in prompt:
       prompt = prompt.split('\n')
       while len(prompt)>1:
@@ -207,14 +234,22 @@ class CLI(cmd.Cmd):
       prompt = prompt[0]
     return prompt
 
+  # @param line (str)
+  # @return (3-tuple)
+  #   #0 (str) command name
+  #   #1 (list) args to pass to the command
+  #   #2 (str) the original string
   def parseline(self,line):
 
     (args,kwargs) = self.get_args(line)
     return (args[0] if args else '',args[1:],line)
 
-  # @param args (str) a command string
+  # @param line (str) a command string
   # @param lower (bool) [False] whether to lowercase everything
-  # @return (list) space-separated args, without quotes commas create a list
+  # @param split (bool) [True] turn args containing commas into list objects
+  # @return (2-tuple)
+  #   #0 (list of (str OR list)) space-separated args
+  #   #1 (dict of name:(str OR list)) keyword arguments
   def get_args(self,line,lower=False,split=True):
     """get space-separated args accounting for quotes"""
 
@@ -233,12 +268,16 @@ class CLI(cmd.Cmd):
         elif s:
           if not last_quoted and split and ',' in s:
             x = s.split(',')
+
+            # differentiate args and kwargs
             if '=' in x[0]:
               (key,x[0]) = x[0].split('=')
               kwargs[key] = x
             else:
               args.append(x)
           else:
+
+            #differentiate args and kwargs
             if '=' in s:
               (key,x) = s.split('=')
               kwargs[key] = x
@@ -266,15 +305,19 @@ class CLI(cmd.Cmd):
 
     return (args,kwargs)
 
+  # just print the prompt again if the user enters nothing
   def emptyline(self):
     pass
 
+  # add an extra newline after command output so the interface looks better
+  # @param stop (bool)
+  # @param line (str)
   def postcmd(self,stop,line):
 
     print('')
     return stop
 
-  def do_EOF(self,line):
+  def do_EOF(self,args):
     """exit the CLI (prompts for save)"""
 
     if self.overwrite():
@@ -283,6 +326,7 @@ class CLI(cmd.Cmd):
   def do_help(self,args):
     """show help text for commands"""
 
+    # find the referenced comand or sub-command
     if args and args[0] in self.exported:
       func = self.exported[args[0]]
       if isinstance(func,dict):
@@ -290,10 +334,16 @@ class CLI(cmd.Cmd):
           print('*** Unknown or missing sub-command')
           return
         func = func[args[1]]
+
+      # first line is always the signature
       print('')
       print('# '+self.get_sig(func)[0])
+
+      # look for __doc__ text in the function ot its parent
       if not func.__doc__:
         func = getattr(super(self.char.__class__,self.char),func.__name__)
+
+      # be smart about formatting leading indents and newlines
       if func.__doc__:
         lines = [x.rstrip() for x in func.__doc__.split('\n')]
         while len(lines) and not lines[0].strip():
@@ -305,6 +355,9 @@ class CLI(cmd.Cmd):
           lines = [x[leading:] for x in lines]
         print('#')
         print('\n'.join(['# '+x for x in lines]))
+
+    # if the requested function is defined here rather than in our Character
+    # just use the cmd.Cmd built-in help method
     else:
       cmd.Cmd.do_help(self,' '.join(args))
 
@@ -319,6 +372,8 @@ class CLI(cmd.Cmd):
       print('Unable to read "%s"' % args[0])
     else:
       (c,errors) = char.Character.load(args[0])
+
+      # print semi-detailed errors to help with debugging
       if errors:
         print('Failed to load "%s"' % args[0])
         print('\n'.join(errors))
@@ -328,6 +383,7 @@ class CLI(cmd.Cmd):
         self.fname = args[0]
         self.modified = False
 
+  # @return (bool) if saving was successful
   def do_save(self,args):
     """save a character to a file"""
 
@@ -339,11 +395,13 @@ class CLI(cmd.Cmd):
         pass
     except:
       print('Unable to write to "%s"' % fname)
-      return
+      return False
 
     self.char.save(fname)
     self.fname = fname
     self.modified = False
+
+    return True
 
   def do_close(self,args):
     """close the current character (prompts for save)"""
@@ -353,6 +411,8 @@ class CLI(cmd.Cmd):
     if self.overwrite():
       self.unplug()
 
+  # check if the character has been modified and prompt for save
+  # @return (bool) if it's okay to trash our current character data
   def overwrite(self):
 
     if self.char is None or not self.modified:
@@ -364,9 +424,14 @@ class CLI(cmd.Cmd):
       return True
     return False
 
+  # if the commnd doesn't match any defined in this file, use those exported
+  # by our Character instead; also checks for argument matching
+  # @param line (str) raw command text
   def default(self,line):
 
     (args,kwargs) = self.get_args(line)
+
+    # pull command or sub-command function from exported
     if args[0] in self.exported:
       val = self.exported[args[0]]
       if isinstance(val,dict):
@@ -384,6 +449,7 @@ class CLI(cmd.Cmd):
       print('Unknown command "%s"' % args[0])
       return
 
+    # check for matching args/kwargs and print error+signature if failed
     try:
       self.check_args(func,args,kwargs)
       result = func(*args,**kwargs)
@@ -391,14 +457,23 @@ class CLI(cmd.Cmd):
       print('*** ArgsError: %s' % e.args[0])
       print('    %s' % e.sig)
       return
+
+    # print generic exceptions and log them in last_trace for later
     except:
       s = traceback.format_exc()
       self.last_trace = s.strip()
       print('*** '+s.split('\n')[-2])
       return
+
+    # print anything returned by the function
     if result:
       print(result)
 
+  # compare user-provided args/kwargs to the command signature
+  # @param func (func) the function to use as reference
+  # @param user_args (list)
+  # @param user_kwargs (dict)
+  # @raise ArgsError
   def check_args(self,func,user_args,user_kwargs):
 
     (sig,args,kwargs) = self.get_sig(func)
@@ -412,6 +487,12 @@ class CLI(cmd.Cmd):
       if key not in kwargs:
         raise ArgsError(sig,'unknown keyword "%s"' % key)
 
+  # inspect a function and parse out its signature
+  # @param func (func)
+  # @return (3-tuple)
+  #   #0 (str) user-readable signature
+  #   #1 (list) argument names
+  #   #2 (list) keyword argument names
   def get_sig(self,func):
 
     (args,varargs,keywords,defaults) = inspect.getargspec(func)
@@ -420,20 +501,26 @@ class CLI(cmd.Cmd):
     kwargs = args[split:] if split else []
     args = args[:split] if split else args
 
+    # account for sub commands e.g. "set_stat"
     name = func.__name__.replace('_',' ')
+
     opts = ['[%s]' % s for s in kwargs]
     space = ' ' if args and opts else ''
     sig = '(%s) %s%s%s' % (name,' '.join(args),space,' '.join(opts))
 
     return (sig,args,kwargs)
 
+  # pull in exported commands and aliases from the Character
+  # @param char (Character)
   def plug(self,char):
 
     self.unplug()
     self.char = char
 
+    # basic commands
     self.exported = {name:getattr(char,name) for name in char.export}
 
+    # sub commands e.g. "set_stat"
     funcs = inspect.getmembers(char,inspect.ismethod)
     for prefix in char.export_prefix:
       self.exported[prefix] = {}
@@ -442,9 +529,11 @@ class CLI(cmd.Cmd):
           name = name[len(prefix)+1:]
           self.exported[prefix][name] = func
 
+    # basic aliases
     for (alias,target) in char.export_alias.items():
       self.exported[alias] = self.exported[target]
 
+    # sub-command aliases
     for (alias,target) in char.export_sub_alias.items():
       for prefix in char.export_prefix:
         self.exported[prefix][alias] = self.exported[prefix][target]
@@ -454,6 +543,7 @@ class CLI(cmd.Cmd):
     self.char = None
     self.exported = {}
 
+  # defaults to a Pathfinder character
   def do_new(self,args):
     """create a new character"""
 

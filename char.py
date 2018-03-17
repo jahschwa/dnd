@@ -2064,11 +2064,12 @@ class Pathfinder(Character):
     """Character level"""
 
     level = self._input(
-        'Enter level',
+        'Enter level (%s)' % self.stats['level'].value,
         parse = int,
         valid = lambda x: x>0
     )
-    self.set_stat('level',level)
+    if level:
+      self.set_stat('level',level)
 
   def _wiz_race(self):
     """Race"""
@@ -2184,7 +2185,7 @@ class Pathfinder(Character):
         adjust = (-2 if i==2 else 2)
         new = self.stats[a].value+adjust
         self.set_stat(a,new)
-        print(('+' if adjust>0 else '')+' '+a)
+        print('%s%s %s' % ('+' if adjust>0 else '',adjust,a))
 
   def _wiz_skill(self):
     """Skill ranks"""

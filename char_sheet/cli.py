@@ -84,7 +84,8 @@
 
 import sys,os,pickle,cmd,inspect,traceback
 
-import char
+import environ
+import dnd.char_sheet.char as char
 
 # keep running forever unless we get EOF from the CLI (i.e. a clean return)
 # if we get a KeyboardInterrupt resume the loop
@@ -549,8 +550,16 @@ class CLI(cmd.Cmd):
 
     if not self.overwrite():
       return
-    args = args[0] if args else 'Pathfinder'
-    self.plug(eval('char.%s()' % args))
+    args = 'Pathfinder' if not args else args[0]
+
+    try:
+      c = char.Character.new(args)
+    except KeyError:
+      print('Unknown Character type "%s"; known types:' % args)
+      print('  '+'\n  '.join(sorted(char.Character.get_systems())))
+      return
+
+    self.plug(c)
     self.modified = True
 
 if __name__=='__main__':

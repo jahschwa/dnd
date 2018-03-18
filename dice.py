@@ -73,12 +73,12 @@ class Dice(object):
     if isinstance(obj,int):
       return self.__add_int(-obj)
     elif isinstance(obj,Dice):
-      return self.__add_dice(obj.neg())
+      return self.__add_dice(-obj)
 
   def __rsub__(self,obj):
 
     if isinstance(obj,int):
-      return self.neg().__add_int(obj)
+      return (-self).__add_int(obj)
     else:
       return NotImplemented
 
@@ -118,6 +118,20 @@ class Dice(object):
     else:
       return NotImplemented
 
+  def __neg__(self):
+
+    new = self.copy()
+    new.bonus *= -1
+    for sides in new.dice:
+      new.dice[sides] *= -1
+    return new
+
+  def __int__(self):
+    return self.as_int(False)
+
+  def __float__(self):
+    return float(int(self))
+
   def __eq__(self,other):
 
     if isinstance(other,Dice):
@@ -149,14 +163,6 @@ class Dice(object):
     return dice
 
 ########## Methods ##########
-
-  def neg(self):
-
-    new = self.copy()
-    new.bonus *= -1
-    for sides in new.dice:
-      new.dice[sides] *= -1
-    return new
 
   def same(self,other):
 
@@ -230,4 +236,3 @@ class Dice(object):
 
   def __repr__(self):
     return '<Dice %s>' % str(self)
-

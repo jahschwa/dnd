@@ -56,19 +56,13 @@
 # used by |
 #    text |
 
-# [TODO] disallow setting backend stats without additional flag
-# [TODO] set should raise exception not return a boolean
-# [TODO] conditional bonuses
 # [TODO] consider another way for set_stat() to interact with plug/unplug?
 # [TODO] decide what goes in here and what goes in the CLI
 # [TODO] Bonus subclasses Stat but only allows root nodes? allows formulas
 # [TODO] stat classes for setting (and getting?) e.g. abilities, skills
-# [TODO] mark skills that can only be used if trained somehow?
 # [TODO] common effect library for importing: feats, spells, conditions
 # [TODO] pre-made/custom views (e.g. show all abilities)
 # [TODO] regex searching
-# [TODO] quote blocking
-# [TODO] keyword acceptance e.g. "set stat text=blah"
 # [TODO] strip tabs/newlines from input
 # [TODO] report modification to the cli somehow (add,set,upgrade...) decorator?
 # [TODO] incrementing? at least for skill ranks?
@@ -79,6 +73,7 @@
 # [TODO] reset bonus original values dynamically to account for leveling up
 # [TODO] make durations mathy
 # [TODO] include effect name when printing bonuses or stats
+# [TODO] check if you can actually set "active" from the CLI
 
 # [TODO] finish Effects (duration tracking, etc.)
 # [TODO] Item
@@ -554,11 +549,11 @@ class Character(object):
     try:
       self.stats[name] = new
       new.plug(self)
-    except FormulaError as e:
+    except FormulaError:
       old.formula = old.original
       old.plug(self)
       self.stats[name] = old
-      raise e
+      raise
 
   # @param bonus (Bonus) the Bonus to add
   # @raise DuplicateError if the name already exists
@@ -655,10 +650,10 @@ class Character(object):
       effect.unplug()
       del self.effects[name]
       self.add_effect(name,bonuses,duration,effect.text,effect.active)
-    except Exception as e:
+    except Exception:
       effect.plug(self)
       self.effects[name] = effect
-      raise e
+      raise
 
   # @param text (Text) the Text to add
   # @raise DuplicateError if the name already exists
@@ -1616,7 +1611,7 @@ class Pathfinder(Character):
   ('cha','int(($charisma-10)/2)'),
 
   ('hp_max',0),('hp','$hp_max+$hd*($con-#con)'),('nonlethal',0),
-  ('initiative','$dex'),('dr',0),('speed',30),
+  ('initiative','$dex'),('dr',0),('sr',0),('speed',30),
 
   ('armor_check',0),('_max_dex',99),('spell_fail',0),
 

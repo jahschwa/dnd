@@ -56,26 +56,50 @@
 # used by |
 #    text |
 
+# Field hierarchy:
+#   Stat
+#     PathfinderSkill
+#   Bonus
+#   Effect
+#   Duration
+#   Item
+#     Weapon
+#     Armor
+#   Dice
+#   Ability
+#     Spell
+#   Event
+#   Text
+
+# ===== high-level / large-scale =====
 # [TODO] consider another way for set_stat() to interact with plug/unplug?
 # [TODO] decide what goes in here and what goes in the CLI
 # [TODO] Bonus subclasses Stat but only allows root nodes? allows formulas
 # [TODO] stat classes for setting (and getting?) e.g. abilities, skills
 # [TODO] common effect library for importing: feats, spells, conditions
+
+# ===== backend =====
+# [TODO] swap meaning of root and leaf
+# [TODO] experience
+# [TODO] raise warning / limit skill ranks? _total_ranks stat?
+# [TODO] reset bonus original values dynamically to account for leveling up
+# [TODO] save bonus raw to file
+# [TODO] make durations mathy
+
+# ===== ui =====
 # [TODO] pre-made/custom views (e.g. show all abilities)
 # [TODO] regex searching
 # [TODO] strip tabs/newlines from input
 # [TODO] report modification to the cli somehow (add,set,upgrade...) decorator?
 # [TODO] incrementing? at least for skill ranks?
-# [TODO] swap meaning of root and leaf
-# [TODO] move Pathfinder to its own file
-# [TODO] experience
-# [TODO] limit skill ranks
-# [TODO] reset bonus original values dynamically to account for leveling up
-# [TODO] make durations mathy
 # [TODO] include effect name when printing bonuses or stats
 # [TODO] check if you can actually set "active" from the CLI
-# [TODO] make more commands accept lists (all commands specifically)
+# [TODO] make more commands accept lists ("all" command specifically)
 
+# ===== wizard =====
+# [TODO] max_hp
+
+# ===== Fields =====
 # [TODO] finish Effects (duration tracking, etc.)
 # [TODO] Item
 # [TODO] Weapon
@@ -83,20 +107,6 @@
 # [TODO] Ability
 # [TODO] Spell
 # [TODO] Event
-
-# Stat
-#   PathfinderSkill
-# Bonus
-# Effect
-# Duration
-# Item
-#   Weapon
-#   Armor
-# Dice
-# Ability
-#   Spell
-# Event
-# Text
 
 import os,time,inspect,importlib
 from collections import OrderedDict

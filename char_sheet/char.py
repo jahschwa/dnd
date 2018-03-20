@@ -79,7 +79,6 @@
 # [TODO] common effect library for importing: feats, spells, conditions
 
 # ===== backend =====
-# [TODO] swap meaning of root and leaf
 # [TODO] experience
 # [TODO] raise warning / limit skill ranks? _total_ranks stat?
 # [TODO] reset bonus original values dynamically to account for leveling up
@@ -98,15 +97,6 @@
 
 # ===== wizard =====
 # [TODO] max_hp
-
-# ===== Fields =====
-# [TODO] finish Effects (duration tracking, etc.)
-# [TODO] Item
-# [TODO] Weapon
-# [TODO] Armor
-# [TODO] Ability
-# [TODO] Spell
-# [TODO] Event
 
 import os,time,inspect,importlib
 from collections import OrderedDict

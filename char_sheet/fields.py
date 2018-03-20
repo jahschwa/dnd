@@ -1,3 +1,26 @@
+# Field hierarchy:
+#   Stat
+#     PathfinderSkill
+#   Bonus
+#   Effect
+#   Duration
+#   Item
+#     Weapon
+#     Armor
+#   Dice
+#   Ability
+#     Spell
+#   Event
+#   Text
+
+# [TODO] finish Effects (duration tracking, etc.)
+# [TODO] Item
+# [TODO] Weapon
+# [TODO] Armor
+# [TODO] Ability
+# [TODO] Spell
+# [TODO] Event
+
 import time
 from collections import OrderedDict
 from functools import reduce
@@ -91,6 +114,10 @@ class Field(object):
 #   - stat tracking and calculation via string formulas and eval()
 #   - stats are considered "root" nodes if their formula is static
 #   - or "leaf" nodes if no other stat depends on it
+#   - Example: dexterity > dex > _ac_dex > ac
+#     - roots: dexterity
+#     - leaves: ac
+#     - neither: dex, _ac_dex
 #   - stats whose name begins with '_' are protected by default
 #   - stats can have Bonuses that affect their value
 ###############################################################################
@@ -163,7 +190,7 @@ class Stat(Field):
         s = s.replace('%s{%s}' % (var,name),expand % name)
         if s!=orig:
           self.uses.add(name)
-          self.leaf = False
+          self.root = False
           usedby.add(char.stats[name])
 
     # iterate over our attributes and replace matching @ aliases
@@ -182,7 +209,7 @@ class Stat(Field):
     # add ourselves as a dependant to stats that are in our formula
     for stat in usedby:
       stat.usedby.add(self.name)
-      stat.root = False
+      stat.leaf = False
 
     self.formula = s
     self.calc()
@@ -213,7 +240,7 @@ class Stat(Field):
       stat = self.char.stats[name]
       stat.usedby.remove(self.name)
       if not stat.usedby:
-        stat.root = True
+        stat.leaf = True
     self.uses = set()
 
     self.root = True
@@ -392,10 +419,6 @@ class Stat(Field):
 #   - bonuses add a number (or Dice) to a stat or item
 #   - they can be turned on and off
 #   - they can be conditional
-#   - stats are considered "root" nodes if their formula is static
-#   - or "leaf" nodes if no other stat depends on it
-#   - stats whose name begins with '_' are protected by default
-#   - stats can have Bonuses that affect their value
 ###############################################################################
 
 class Bonus(Field):

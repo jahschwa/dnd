@@ -714,7 +714,8 @@ class PathfinderSkill(Stat):
         self.trained_only = True
         break
 
-  # looks like: c!
+  # looks like: sc!
+  #   s (type) this is a skill
   #   c (class_skill)
   #   ! OR t (trained_only) based on ranks>0
   # @return (str)
@@ -722,7 +723,7 @@ class PathfinderSkill(Stat):
 
     cs = '-c'[self.class_skill]
     tr = ['-!'[self.trained_only],'t'][self.ranks>0]
-    return '%s%s' % (cs,tr)
+    return 's%s%s' % (cs,tr)
 
   # @return (str)
   def str_all(self):

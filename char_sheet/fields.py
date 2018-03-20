@@ -347,7 +347,8 @@ class Stat(Field):
 
     return self.__class__(*a,**k)
 
-  # looks like: rl
+  # looks like: -rl
+  #   - (type) should be overridden in child classes
   #   r (root) our formula has no dependencies
   #   l (leaf) no other stat depends on us
   # @return (str)
@@ -355,7 +356,7 @@ class Stat(Field):
 
     root = '-r'[self.root]
     leaf = '-l'[self.leaf]
-    return '%s%s' % (root,leaf)
+    return '-%s%s' % (root,leaf)
 
   # looks like: rl 999 NAME (b:5/10 ?:0/5)
   # followed by conditional bonuses indented on new lines

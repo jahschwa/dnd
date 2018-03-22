@@ -95,9 +95,6 @@
 # [TODO] check if you can actually set "active" from the CLI
 # [TODO] make more commands accept lists ("all" command specifically)
 
-# ===== wizard =====
-# [TODO] max_hp
-
 import os,time,inspect,importlib
 from collections import OrderedDict
 from functools import reduce

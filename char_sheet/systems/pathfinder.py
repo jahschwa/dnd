@@ -30,7 +30,7 @@ class Pathfinder(Character):
   ('wis','int(($wisdom-10)/2)'),
   ('cha','int(($charisma-10)/2)'),
 
-  ('hp_max',0),('hp','$hp_max+$hd*($con-#con)'),('nonlethal',0),
+  ('hit_die',0),('hp_max',0),('hp','$hp_max+$hd*($con-#con)'),('nonlethal',0),
   ('initiative','$dex'),('dr',0),('sr',0),('speed',30),
 
   ('armor_check',0),('_max_dex',99),('spell_fail',0),
@@ -187,40 +187,40 @@ class Pathfinder(Character):
       ]
   }
 
-  CLASS_INDEX = ['skills','bab','saves','cast_mod']
+  CLASS_INDEX = ['hd','skills','bab','saves','cast_mod']
   CLASS_INFO = {
-      'barbarian': ['10011000001010000001000010010000110','1.00','100',None],
-      'bard':      ['11111101100011111111111111101111001','0.75','011','cha'],
-      'cleric':    ['01001100000101000100111100101010000','0.75','101','wis'],
-      'druid':     ['00011000011100001001000010110010110','0.75','101','wis'],
-      'fighter':   ['00011000001010110000000000110000110','1.00','100',None],
-      'monk':      ['10011000100010000100001011111001010','0.75','111',None],
-      'paladin':   ['00001100001100000000101000111010000','1.00','101','cha'],
-      'ranger':    ['00011000001110101001000010110011110','1.00','110','wis'],
-      'rogue':     ['11111111100010100010000111101101011','0.75','010',None],
-      'sorcerer':  ['01101000010011000000000000100010001','0.50','001','cha'],
-      'wizard':    ['01001000010001111111111100100010000','0.50','001','int'],
+      'barbarian': [12,'10011000001010000001000010010000110','1.00','100',None],
+      'bard':      [8, '11111101100011111111111111101111001','0.75','011','cha'],
+      'cleric':    [8, '01001100000101000100111100101010000','0.75','101','wis'],
+      'druid':     [8, '00011000011100001001000010110010110','0.75','101','wis'],
+      'fighter':   [10,'00011000001010110000000000110000110','1.00','100',None],
+      'monk':      [8, '10011000100010000100001011111001010','0.75','111',None],
+      'paladin':   [10,'00001100001100000000101000111010000','1.00','101','cha'],
+      'ranger':    [10,'00011000001110101001000010110011110','1.00','110','wis'],
+      'rogue':     [8, '11111111100010100010000111101101011','0.75','010',None],
+      'sorcerer':  [6, '01101000010011000000000000100010001','0.50','001','cha'],
+      'wizard':    [6, '01001000010001111111111100100010000','0.50','001','int'],
 
-      'alchemist':   ['01000010010101000001000010100110101','0.75','110','int'],
-      'cavalier':    ['00111100001010000000000000111000010','1.00','100',None],
-      'gunslinger':  ['10111000001110010010000010110100110','1.00','110',None],
-      'inquisitor':  ['00111101000111100001011010111011110','0.75','101','wis'],
-      'magus':       ['00011000010011100000010000110010011','0.75','101','int'],
-      'oracle':      ['00001100000100000100011000101010000','0.75','001','cha'],
-      'summoner':    ['00001000011000000000000100110010001','0.75','001','cha'],
-      'vigilante':   ['11111111100010110010000011111101111','0.75','011',None],
-      'witch':       ['00001000010111000101010000100010001','0.50','011','int'],
+      'alchemist':   [8, '01000010010101000001000010100110101','0.75','110','int'],
+      'cavalier':    [10,'00111100001010000000000000111000010','1.00','100',None],
+      'gunslinger':  [10,'10111000001110010010000010110100110','1.00','110',None],
+      'inquisitor':  [8, '00111101000111100001011010111011110','0.75','101','wis'],
+      'magus':       [8, '00011000010011100000010000110010011','0.75','101','int'],
+      'oracle':      [8, '00001100000100000100011000101010000','0.75','001','cha'],
+      'summoner':    [8, '00001000011000000000000100110010001','0.75','001','cha'],
+      'vigilante':   [8, '11111111100010110010000011111101111','0.75','011',None],
+      'witch':       [6, '00001000010111000101010000100010001','0.50','011','int'],
 
-      'arcane archer':         ['00000000000000000000000010010001100','1.00','332',None],
-      'arcane trickster':      ['11110111100001111111111010001111010','0.50','233',None],
-      'assassin':              ['10110111100010000000000110001101011','0.75','232',None],
-      'dragon disciple':       ['00000100110001111111111010000010000','1.00','323',None],
-      'duelist':               ['10100000100000000000000011001000000','1.00','232',None],
-      'eldritch knight':       ['00010000000001000000100100011010010','1.00','322',None],
-      'loremaster':            ['01000100001101111111111101000010001','0.50','223',None],
-      'mystic theurge':        ['00000000000001000000001000001010000','0.50','223',None],
-      'pathfinder chronicler': ['01100101100011111111111111011100101','0.75','233',None],
-      'shadowdancer':          ['10100101100000000000000011000101000','0.75','232',None]
+      'arcane archer':         [10,'00000000000000000000000010010001100','1.00','332',None],
+      'arcane trickster':      [6, '11110111100001111111111010001111010','0.50','233',None],
+      'assassin':              [8, '10110111100010000000000110001101011','0.75','232',None],
+      'dragon disciple':       [12,'00000100110001111111111010000010000','1.00','323',None],
+      'duelist':               [10,'10100000100000000000000011001000000','1.00','232',None],
+      'eldritch knight':       [10,'00010000000001000000100100011010010','1.00','322',None],
+      'loremaster':            [6, '01000100001101111111111101000010001','0.50','223',None],
+      'mystic theurge':        [6, '00000000000001000000001000001010000','0.50','223',None],
+      'pathfinder chronicler': [8, '01100101100011111111111111011100101','0.75','233',None],
+      'shadowdancer':          [8, '10100101100000000000000011000101000','0.75','232',None]
   }
 
   CLASS_SAVES = ['int(x/3)','2+int(x/2)','int((x+1)/3)','1+int((x-1)/2)']
@@ -444,6 +444,7 @@ class Pathfinder(Character):
       - race [ALL] set race and add racial bonuses
       - class [ALL] set class, some stats, and class skills
       - abilities [ALL] set ability scores and racial adjustments
+      - hp [ALL] set hit points
       - skill [ALL] set skill ranks
       - size [ONE] set size (e.g. medium)
       - class_skill [ONE] set class skills
@@ -453,7 +454,7 @@ class Pathfinder(Character):
       - quit - exit the wizard making no further changes
     """
 
-    actions = ['level','race','class','abilities','skill']
+    actions = ['level','race','class','abilities','hp','skill']
     standalone = ['size','class_skill']
     if action not in actions+standalone and action not in ('help','all'):
       raise ValueError('invalid sub-command "%s"' % action)
@@ -547,6 +548,10 @@ class Pathfinder(Character):
     self.set_text('class',clas)
     info = self.CLASS_INFO[clas]
 
+    hd = info[self.CLASS_INDEX.index('hd')]
+    self.set_stat('hit_die',hd)
+    print('hit die: d%s' % hd)
+
     names = list(self.SKILLS.keys())
     one_hot = info[self.CLASS_INDEX.index('skills')]
     skills = []
@@ -601,6 +606,16 @@ class Pathfinder(Character):
         new = self.stats[a].value+adjust
         self.set_stat(a,new)
         print('%s%s %s' % ('+' if adjust>0 else '',adjust,a))
+
+  def _wiz_hp(self):
+    """Hitpoints"""
+
+    hp = self._input(
+      'Maximum HP',
+      parse = int,
+      valid = lambda x: x>0
+    )
+    self.set_stat('hp_max',hp)
 
   def _wiz_skill(self):
     """Skill ranks"""

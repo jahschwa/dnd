@@ -1,9 +1,19 @@
 from collections import OrderedDict
 from functools import reduce
 
+from dnd import util
 from dnd.char_sheet.char import Character
 from dnd.char_sheet.fields import *
 from dnd.char_sheet.errors import *
+
+# [TODO] level up wiz
+# [TODO] multiclassing?
+# [TODO] raise warning / limit skill ranks? _total_ranks stat?
+# [TODO] conditional jump modifier based on move speed
+# [TODO] craft, profession, perform
+# [TODO] class skills
+# [TODO] max_dex
+# [TODO] consider using _base_reflex etc.
 
 ###############################################################################
 # Pathfinder character class
@@ -16,7 +26,7 @@ class Pathfinder(Character):
   STATS = Character.STATS.copy()
   STATS.update([
 
-  ('level',1),('hd','$level'),('caster_level','$level'),
+  ('xp',0),('level',1),('hd','$level'),('caster_level','$level'),
 
   ('size',0),('legs',2),
   ('_size_index','4 if $size not in [8,4,2,1,0,-1,-2,-4,-8] else [8,4,2,1,0,-1,-2,-4,-8].index($size)'),
@@ -88,7 +98,7 @@ class Pathfinder(Character):
       'use_magic_device']
 
   TEXTS = Character.TEXTS.copy()
-  TEXTS.update({'race':'','class':'','race_traits':''})
+  TEXTS.update({'race':'','class':'','race_traits':'','xp_prog':'medium'})
 
   BONUS_TYPES = ('alchemical','armor','circumstance','competence','deflection',
       'dodge','enhancement','inherent','insight','luck','morale',
@@ -103,6 +113,12 @@ class Pathfinder(Character):
   ABILITIES = ['strength','dexterity','constitution',
       'intelligence','wisdom','charisma']
   SAVES = ['fortitude','reflex','will']
+
+  XP = {
+    'slow'   : [0,3,7.5,14,23,35,53,77,115,160,235,330,475,665,955,1350,1900,2700,3850,5350],
+    'medium' : [0,2,5,9,15,23,35,51,75,105,155,220,315,445,635,890,1300,1800,2550,3600],
+    'fast'   : [0,1.3,3.3,6,10,15,23,34,50,71,105,145,210,295,425,600,850,1200,1700,2400]
+  }
 
   SIZE_NAMES = OrderedDict([
       ('f','fine'),
@@ -225,18 +241,12 @@ class Pathfinder(Character):
 
   CLASS_SAVES = ['int(x/3)','2+int(x/2)','int((x+1)/3)','1+int((x-1)/2)']
 
-  # [TODO] conditional jump modifier based on move speed
-  # [TODO] craft, profession, perform
-  # [TODO] class skills
-  # [TODO] max_dex
-  # [TODO] consider using _base_reflex etc.
-
   # @param args (list) passed to Character
   # @param kwargs (dict) passed to Character
   def __init__(self,*args,**kwargs):
 
     super(Pathfinder,self).__init__(*args,**kwargs)
-    self.export += ['dmg','heal','skill','wiz']
+    self.export += ['dmg','heal','skill','wiz','xp']
 
   # include skills in the setup method
   # see Character._setup()
@@ -314,6 +324,24 @@ class Pathfinder(Character):
     size = size[0].lower()
     i = list(self.SIZE_NAMES.keys()).index(size)
     self.set_stat('size',self.SIZES[i],self.SIZE_NAMES[size])
+
+  # if None, use the values from this Character
+  # @param xp (int) [None] amount of experience
+  # @param prog (str) [None] level progression, one of [s,m,f]
+  # @return (int) 
+  def _calc_lvl(self,xp=None,prog=None):
+
+    if xp is None:
+      xp = self.stats['xp'].value
+    if prog is None:
+      prog = self.texts['xp_prog'].text
+
+    if xp==0:
+      return 1
+    for (l,x) in enumerate(self.XP[prog]):
+      if xp<int(1000*x):
+        return l
+    return 20
 
 ###############################################################################
 # User commands
@@ -419,6 +447,46 @@ class Pathfinder(Character):
       if result:
         print(result)
 
+  def xp(self,action='info',value=0):
+    """
+    manage XP
+      - action (string) see below
+      - [value = 0] (int)
+    
+    actions:
+      - info [value = UNUSED] show xp/level info
+      - add [value = 0] gain experience
+    """
+
+    actions = ['info','add']
+    if action not in actions:
+      raise ValueError('invalid sub-command "%s"' % action)
+    
+    if action=='info':
+      xp = self.stats['xp'].value
+      lvl = self.stats['level'].value
+      expected = self._calc_lvl()
+      if expected!=lvl:
+        print('### %s XP should be Lvl %s but our level is set to %s' %
+            (util.group(xp),expected,lvl))
+      if expected==20:
+        return '%s / Lvl 20' % util.group(xp)
+      xp_next = int(1000*self.XP[self.texts['xp_prog'].text][expected])
+      return ('%s / Lvl %s   + %s   = %s / Lvl %s' %
+          (util.group(xp),expected,xp_next-xp,xp_next,expected+1))
+
+    elif action=='add':
+      gained = int(value)
+      if gained<=0:
+        raise ValueError('XP value must be > 0')
+      old = self.stats['level'].value
+      self.set_stat('xp',self.stats['xp'].value+gained)
+      new = self._calc_lvl()
+      if new>old:
+        print('### Level up: %s --> %s' % (old,new))
+        self.set_stat('level',new)
+      return self.xp()
+
 ###############################################################################
 # Overrides
 ###############################################################################
@@ -479,6 +547,13 @@ class Pathfinder(Character):
   def _wiz_level(self):
     """Character level"""
 
+    prog = self._input(
+        'Enter XP progression (s/M/f)',
+        valid = lambda x: x[0] in [x[0] for x in self.XP]
+    )
+    prog = [k for k in self.XP if k.startswith(prog)][0]
+    self.set_text('xp_prog',prog)
+
     level = self._input(
         'Enter level (%s)' % self.stats['level'].value,
         parse = int,
@@ -486,6 +561,10 @@ class Pathfinder(Character):
     )
     if level:
       self.set_stat('level',level)
+      prog = self.texts['xp_prog'].text
+      xp = int(1000*self.XP[prog][level-1])
+      self.set_stat('xp',xp)
+      print('current xp: %s' % util.group(xp))
 
   def _wiz_race(self):
     """Race"""
@@ -611,9 +690,9 @@ class Pathfinder(Character):
     """Hitpoints"""
 
     hp = self._input(
-      'Maximum HP',
-      parse = int,
-      valid = lambda x: x>0
+        'Maximum HP',
+        parse = int,
+        valid = lambda x: x>0
     )
     self.set_stat('hp_max',hp)
 

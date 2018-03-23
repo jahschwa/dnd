@@ -79,8 +79,6 @@
 # [TODO] common effect library for importing: feats, spells, conditions
 
 # ===== backend =====
-# [TODO] experience
-# [TODO] raise warning / limit skill ranks? _total_ranks stat?
 # [TODO] reset bonus original values dynamically to account for leveling up
 # [TODO] save bonus raw to file
 # [TODO] make durations mathy

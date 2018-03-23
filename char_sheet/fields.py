@@ -13,6 +13,7 @@
 #   Event
 #   Text
 
+# [TODO] add a "Function" class? for stats?
 # [TODO] finish Effects (duration tracking, etc.)
 # [TODO] Item
 # [TODO] Weapon

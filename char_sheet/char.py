@@ -78,14 +78,12 @@
 # [TODO] stat classes for setting (and getting?) e.g. abilities, skills
 # [TODO] common effect library for importing: feats, spells, conditions
 # [TODO] consolidate / move to fields.py add/set/del commands
-# [TODO] move Duration out of fields.py
 # [TODO] consider moving wizard framework from Pathfinder to Character
 # [TODO] abstract output into functions in cli somehow
 
 # ===== backend =====
 # [TODO] reset bonus original values dynamically to account for leveling up
 # [TODO] save bonus raw to file
-# [TODO] make durations mathy
 
 # ===== ui =====
 # [TODO] pre-made/custom views (e.g. show all abilities)
@@ -103,6 +101,7 @@ from collections import OrderedDict
 from functools import reduce
 
 from dnd.dice import Dice
+from dnd.duration import Duration
 from dnd.char_sheet.fields import *
 from dnd.char_sheet.errors import *
 

@@ -138,6 +138,7 @@ class Dice(object):
       return self.avg()==other.avg()
     elif isinstance(other,int):
       return self.avg()==other
+    return NotImplemented
 
   def __lt__(self,other):
 
@@ -145,6 +146,7 @@ class Dice(object):
       return self.avg()<other.avg()
     elif isinstance(other,int):
       return self.avg()<other
+    return NotImplemented
 
 ########## Helper functions ##########
 

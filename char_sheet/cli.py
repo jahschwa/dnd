@@ -74,13 +74,14 @@
 
 # ===== TODO =====
 #
-# [TODO] help text (including listing aliases)
+# [TODO] help/list aliases
 # [TODO] autocompletions
 # [TODO] consider managing multiple characters
 # [TODO] better exception messages, especially for num args
 # [TODO] dice roller
 # [TODO] custom aliases?
 # [TODO] actual modificaion tracking for save prompting
+# [TODO] review load/save logic and kill "old" methods
 
 import sys,os,pickle,cmd,inspect,traceback
 
@@ -163,7 +164,7 @@ class CLI(cmd.Cmd):
 
     print(args)
 
-  def do_old_load(self,args):
+  def old_load(self,args):
 
     if not args:
       print('Missing file name')
@@ -181,7 +182,7 @@ class CLI(cmd.Cmd):
     except Exception:
       print('Unable to unpickle "%s"' % args[0])
 
-  def do_old_save(self,args):
+  def old_save(self,args):
 
     fname = self.fname if not args else ' '.join(args)
     if not fname:
@@ -208,6 +209,8 @@ class CLI(cmd.Cmd):
 
     cmd.Cmd.__init__(self)
     self.prompt = Prompt(self.get_prompt)
+    self.doc_header = 'General commands:'
+    self.misc_header = 'Explanations:'
 
     self.fname = fname
     self.char = None
@@ -359,8 +362,20 @@ class CLI(cmd.Cmd):
 
     # if the requested function is defined here rather than in our Character
     # just use the cmd.Cmd built-in help method
-    else:
-      cmd.Cmd.do_help(self,' '.join(args))
+    cmd.Cmd.do_help(self,' '.join(args))
+
+    # help text for exported commands
+    if not args and self.char is not None:
+      self.print_topics(
+          'Character commands:',
+          sorted(self.char.export),
+          15, 80
+      )
+      self.print_topics(
+          'Prefixed cmds:',
+          sorted(self.char.export_prefix),
+          15, 80
+      )
 
   def do_load(self,args):
     """load a character from a file"""

@@ -491,11 +491,13 @@ class Pathfinder(Character):
 # Overrides
 ###############################################################################
 
-  def add_bonus(self,name,value,stats,typ=None,cond=None,text=None,active=True):
+  def _add_bonus(self,bonus):
 
-    if isinstance(stats,str) and stats.lower()=='ac':
-      stats = self.AC_BONUS.get(typ,'_ac_misc')
-    super(Pathfinder,self).add_bonus(name,value,stats,typ,cond,text,active)
+    bonus.stats = [
+        (self.AC_BONUS.get(bonus.typ,'_ac_misc') if s=='ac' else s)
+        for s in bonus.stats
+    ]
+    super(Pathfinder,self)._add_bonus(bonus)
 
 ###############################################################################
 # Setup wizard

@@ -45,7 +45,7 @@
 
 # ===== QUICK COMMAND LISTING =====
 #
-# implemented types: stat bonus text
+# implemented types: stat bonus effect text
 #
 # load
 # new
@@ -74,7 +74,7 @@
 
 # ===== TODO =====
 #
-# [TODO] help text
+# [TODO] help text (including listing aliases)
 # [TODO] autocompletions
 # [TODO] consider managing multiple characters
 # [TODO] better exception messages, especially for num args
@@ -88,7 +88,7 @@ import environ
 import dnd.char_sheet.char as char
 
 # keep running forever unless we get EOF from the CLI (i.e. a clean return)
-# if we get a KeyboardInterrupt resume the loop
+# if we get a KeyboardInterrupt or EOFError resume the loop
 # @param fname (None,str) [None] the file to open
 def main(fname=None):
 
@@ -99,8 +99,8 @@ def main(fname=None):
     try:
       cli.cmdloop()
       run = False
-    except KeyboardInterrupt:
-      print('use Ctrl+D / EOF to exit')
+    except (KeyboardInterrupt,EOFError):
+      print('\n*** Use Ctrl+D / EOF at the main prompt to exit')
       pass
 
 # thrown when the user passes non-matching arguments to a command
@@ -384,11 +384,23 @@ class CLI(cmd.Cmd):
         self.fname = args[0]
         self.modified = False
 
-  # @return (bool) if saving was successful
   def do_save(self,args):
     """save a character to a file"""
 
-    fname = self.fname if not args else ' '.join(args)
+    self.save(self.fname if not args else ' '.join(args))
+
+  def do_close(self,args):
+    """close the current character (prompts for save)"""
+
+    if not self.char:
+      return
+    if self.overwrite():
+      self.unplug()
+
+  # @param fname (str) the destination file
+  # @return (bool) if saving was successful
+  def save(self,fname=None):
+
     if not fname:
       fname = input('Enter a file name: ')
     try:
@@ -404,14 +416,6 @@ class CLI(cmd.Cmd):
 
     return True
 
-  def do_close(self,args):
-    """close the current character (prompts for save)"""
-
-    if not self.char:
-      return
-    if self.overwrite():
-      self.unplug()
-
   # check if the character has been modified and prompt for save
   # @return (bool) if it's okay to trash our current character data
   def overwrite(self):
@@ -420,7 +424,7 @@ class CLI(cmd.Cmd):
       return True
     choice = input('\nSave changes to current char? (Y/n/c): ').lower()
     if choice in ('','y','yes'):
-      return self.do_save([])==False
+      return self.save()==False
     if choice in ('n','no'):
       return True
     return False

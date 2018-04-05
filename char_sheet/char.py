@@ -23,8 +23,8 @@
 
 ##### ALIASES #####
 
-#    get : g     add : a    set : s      del : d    all : l
-# search : ?      on : +    off : -   revert : r
+#    get : g     add : a    set : s      del : d        all : l      reset : r
+# search : ?      on : +    off : -   revert : v    advance : ++    create : c
 #   stat : s   bonus : b   text : t
 
 ##### EXAMPLES #####
@@ -77,6 +77,10 @@
 # [TODO] Bonus subclasses Stat but only allows root nodes? allows formulas
 # [TODO] stat classes for setting (and getting?) e.g. abilities, skills
 # [TODO] common effect library for importing: feats, spells, conditions
+# [TODO] consolidate / move to fields.py add/set/del commands
+# [TODO] move Duration out of fields.py
+# [TODO] consider moving wizard framework from Pathfinder to Character
+# [TODO] abstract output into functions in cli somehow
 
 # ===== backend =====
 # [TODO] reset bonus original values dynamically to account for leveling up
@@ -92,6 +96,7 @@
 # [TODO] include effect name when printing bonuses or stats
 # [TODO] check if you can actually set "active" from the CLI
 # [TODO] make more commands accept lists ("all" command specifically)
+# [TODO] ability to rename things
 
 import os,time,inspect,importlib
 from collections import OrderedDict
@@ -136,16 +141,22 @@ class Character(object):
   # all bonuses stack
   BONUS_STACK = Universe()
 
-  # @return (dict) name:class pairs for each system we know about
-  #   @key (str) name of the file/class
-  #   @value (class) the class itself for instantiation
+  # @return (dict) name:class (str:class) pairs for each Field we know about
   @staticmethod
-  def get_systems():
+  def _get_fields():
+
+    return {k:v for (k,v) in globals().items()
+        if inspect.isclass(v) and issubclass(v,Field) and v!=Field}
+
+  # @return (dict) name:class (str:class) pairs for each System we know about
+  @staticmethod
+  def _get_systems(lower=False):
 
     path = os.path.abspath(os.path.dirname(__file__))
     path = os.path.join(path,'systems')
 
-    systems = {'character':Character}
+    systems = {'%sharacter'%('Cc'[lower]) : Character}
+    fields = {}
     for fname in os.listdir(path):
       if fname.startswith('_'):
         continue
@@ -155,10 +166,13 @@ class Character(object):
       mod = importlib.util.module_from_spec(spec)
       spec.loader.exec_module(mod)
       for (name,cls) in inspect.getmembers(mod,inspect.isclass):
-        if issubclass(cls,Character) and cls!=Character:
-          systems[name.lower()] = cls
+        if issubclass(cls,Character):
+          systems[name.lower() if lower else name] = cls
+        if issubclass(cls,Field):
+          fields[name.lower() if lower else name] = cls
 
-    return systems
+    fields.update(Character._get_fields())
+    return (systems,fields)
 
   # create a new character
   # @param name (None,str) [None] name of the class (defaults to Character)
@@ -169,7 +183,8 @@ class Character(object):
   def new(name=None,*args,**kwargs):
 
     name = name or 'character'
-    return Character.get_systems()[name.lower()](*args,**kwargs)
+    (chars,_) = Character._get_systems(lower=True)
+    return chars[name.lower()](*args,**kwargs)
 
   # load a character from file
   # @param name (str) file path
@@ -181,10 +196,7 @@ class Character(object):
       lines = [x.strip('\n') for x in f.readlines()]
 
     errors = []
-    chars = {k:v for (k,v) in globals().items()
-        if inspect.isclass(v) and issubclass(v,Character)}
-    fields = {k:v for (k,v) in globals().items()
-        if inspect.isclass(v) and issubclass(v,Field)}
+    (chars,fields) = Character._get_systems()
 
     char = None
     for (i,line) in enumerate(lines):
@@ -192,19 +204,21 @@ class Character(object):
         continue
       if not char:
         if line not in chars:
-          return ['line %s | unknown character type "%s"' % (i+1,line[0])]
+          errors.append('line %.4d | unknown character system "%s"'
+              % (i+1,line))
+          break
         char = chars[line](setup=False)
       else:
         line = line.split('\t')
         if line[0] not in fields:
-          errors.append('line %s | unknown object type "%s"' % (i+1,line[0]))
+          errors.append('line %.4d | unknown object type "%s"' % (i+1,line[0]))
           continue
         try:
           obj = fields[line[0]].load(line[1:])
           if not errors:
             char._get_add_method(obj.__class__)(obj)
         except Exception as e:
-          errors.append('line %s |   %s' % (i,' / '.join(line)))
+          errors.append('line %.4d |   %s' % (i+1,' / '.join(line)))
           errors.append('*** %s: %s' % (e.__class__.__name__,e.args[0]))
 
     # add any new stats added since the character was saved
@@ -237,17 +251,27 @@ class Character(object):
       ('t','text')])
 
     # register commands
-    self.export = ['search','on','off','revert','get','all']
+    self.export = ['search','on','off','revert','get','all','advance','reset']
     # register commands that have sub commands
-    self.export_prefix = ['add','set','del']
+    self.export_prefix = ['add','set','del','create']
     # register aliases
     self.export_alias = {
-      '?':'search','+':'on','-':'off','r':'revert','g':'get','l':'all',
-      'a':'add','s':'set','d':'del'
+      '?' : 'search',
+      '+' : 'on',
+      '-' : 'off',
+      'v' : 'revert',
+      'g' : 'get',
+      'l' : 'all',
+      'a' : 'add',
+      's' : 'set',
+      'd' : 'del',
+      '++': 'advance',
+      'r' : 'reset',
+      'c' : 'create'
     }
     # register sub command aliases
     # [TODO] improve and include more objects
-    self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sbt'}
+    self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sbet'}
 
     # this doesn't execute when loading from a file to prevent conflicts
     if setup:
@@ -489,6 +513,35 @@ class Character(object):
     except AttributeError:
       raise KeyError('unknown %s "%s"' % (typ,name))
 
+  def advance(self,duration=1,effects='*'):
+    """
+    advance Effects and check for their expiry
+      - duration (Duration) [1rd] amount of time to move forward
+        - bare integers are interpreted as rounds
+        - valid units (e.g. 5min):
+          - rd  = rounds
+          - min = minutes (10 rounds)
+          - hr  = hours
+          - day = days
+          - yr  = years
+        - units can be combined with a plus sign (e.g. 1min+5rd)
+        - passing "inf" will expire all Effects that aren't permanent
+      - effects (string,list) [*] effect(s) to advance (defaults to all)
+    """
+
+    if effects=='*':
+      effects = self.effects.keys()
+    elif not isinstance(effects,list):
+      effects = [effects]
+
+    for name in effects:
+      try:
+        effect = self.effects[name]
+      except KeyError:
+        raise KeyError('unknown effect "%s"' % name)
+      if effect.is_active() and effect.advance(duration):
+        print('!!! Effect expired: %s (%s)' % (name,','.join(effect.bonuses)))
+
   # @param stat (Stat) the Stat to add
   # @raise DuplicateError if the name already exists
   def _add_stat(self,stat):
@@ -632,14 +685,14 @@ class Character(object):
     self.effects[effect.name] = effect
 
   # @raise DuplicateError if name already exists
-  def add_effect(self,name,bonuses,duration=None,text=None,active=None):
+  def add_effect(self,name,bonuses,duration=None,text=None,active=True):
     """
     add a new Effect
       - name (string)
       - bonuses (string,list) the bonuses created by this Effect
-      - [duration = None] (string) valid units: rd,min,hr,day (None = infinite)
+      - [duration = None] (string) see "help advance" (None = infinite)
       - text (string) [None]
-      - [active = None] (bool) if not None, (de)activate all our bonuses
+      - [active = True] (bool) turn on/off all our bonuses
     """
 
     effect = Effect(name,bonuses,Duration(duration,self),text,active)
@@ -652,7 +705,6 @@ class Character(object):
       - name (string)
       - [bonuses = None] (string,list)
       - [duration = None] (string) see 'help add effect'
-        - None means don't update it, so use 'inf' to set an infinite duration
     """
 
     effect = self.effects[name]
@@ -661,11 +713,25 @@ class Character(object):
     try:
       effect.unplug()
       del self.effects[name]
-      self.add_effect(name,bonuses,duration,effect.text,effect.active)
+      self.add_effect(name,bonuses,duration,effect.text,effect.is_active())
     except Exception:
       effect.plug(self)
       self.effects[name] = effect
       raise
+
+  # @raise KeyError if name does not exist
+  def del_effect(self,name):
+    """
+    delete an Effect
+      - name (string)
+    """
+
+    try:
+      self.effects[name].unplug()
+    except KeyError:
+      raise KeyError('unknown effect "%s"' % name)
+
+    del self.effects[name]
 
   # @param text (Text) the Text to add
   # @raise DuplicateError if the name already exists
@@ -740,11 +806,105 @@ class Character(object):
   # @raise KeyError if name does not exist
   def revert(self,name):
     """
-    revert a bonus to its last state
+    revert a bonus or effect to its last state
       - name (string)
     """
 
-    try:
+    if name in self.bonuses:
       self.bonuses[name].revert()
+    elif name in self.effects:
+      self.effects[name].revert()
+    else:
+      raise KeyError('unknwown bonus/effect "%s"' % name)
+
+  # @raise KeyError if name does not exist
+  def reset(self,names):
+    """
+    reset the duration of (and activate) effect(s)
+      - name (string,list) effect(s) to reset
+    """
+
+    if not isinstance(names,list):
+      names = [names]
+
+    try:
+      for name in names:
+        self.effects[name].reset()
     except KeyError:
-      raise KeyError('unknwown bonus "%s"' % name)
+      raise KeyError('unknown effect "%s"' % name)
+
+###############################################################################
+# Setup wizard-esque commands
+###############################################################################
+
+  def create_stat(self):
+    raise NotImplementedError
+
+  def create_bonus(self):
+    raise NotImplementedError
+
+  def create_effect(self,name=None,duration=None,text=None,active=True):
+    """
+    create an Effect and its bonuses
+      - name (string)
+      - [duration = None] (string) see "help advance" (None = infinite)
+      - text (string) [None]
+      - [active = True] (bool) turn on/off all our bonuses
+    """
+
+    name = name or self._input(
+        'Effect name',
+        blank=False,
+        valid=lambda x:x not in self.effects
+    )
+
+    duration = duration or self._input(
+        'Effect duration (infinite)',
+        parse=Duration
+    ) or None
+
+    bonuses = []
+
+    print('\nType "skip" at any prompt to finish entering bonuses\n')
+    try:
+      while True:
+
+        n = (len(bonuses)+1)
+        b_name = '_%s_%s' % (name,n)
+        b_name = self._input(
+            'Bonus#%s name (%s)' % (n,b_name),
+            valid=lambda x:x not in self.bonuses
+        ) or b_name
+
+        b_value = self._input(
+            'Bonus#%s value' % n,
+            blank=False,
+            parse=int
+        )
+
+        b_stats = self._input(
+            'Bonus#%s stats' % n,
+            blank=False,
+            parse=lambda x:x.split(','),
+            valid=lambda x:reduce(lambda a,b:a and (b in self.stats),x,True)
+        )
+
+        b_typ = self._input(
+            'Bonus#%s type (none)' % n,
+            valid=lambda x:x in self.BONUS_TYPES
+        ) or None
+
+        bonuses.append(Bonus(b_name,b_value,b_stats,b_typ))
+        print('')
+
+    except UserSkipException:
+      print('\r')
+
+    for bonus in bonuses:
+      self._add_bonus(bonus)
+    
+    self.add_effect(name,[b.name for b in bonuses],duration,text)
+    print(self.effects[name])
+  
+  def create_text(self):
+    raise NotImplementedError

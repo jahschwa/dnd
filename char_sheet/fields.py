@@ -501,7 +501,12 @@ class Bonus(Field):
   def off(self,force=False):
 
     # if we belong to an Effect and it is active, we should stay on
-    if force or not reduce(lambda a,b:a or b.is_active(),self.usedby,False):
+    if force:
+      self.toggle(False)
+    else:
+      for e in self.usedby:
+        if self.char.effects[e].is_active():
+          return
       self.toggle(False)
 
   # @param new (bool) the new state; could be the same as our old state
@@ -520,10 +525,11 @@ class Bonus(Field):
 
     if self.active==self.last:
       return
-    self.active = self.last
+    (self.active,self.last) = (self.last,self.active)
     self.calc()
 
   # looks like: [+] NAME VALUE STATS (type)
+  # belongs to effects: [+] NAME VALUE STATS (type) {effect}
   # conditional: [-] NAME VALUE STATS (type) ? CONDITION
   # @param name (bool) [True] print our name
   # @param stat (bool) [True] print the stats we affect
@@ -537,8 +543,9 @@ class Bonus(Field):
       s = ' %s' % ','.join(self.stats)
     act = '-+'[self.active]
     sign = '+' if self.value>=0 else ''
+    eff = '' if not self.usedby else '{%s}'%','.join(sorted(self.usedby))
     cond = '' if not self.condition else ' ? %s' % self.condition
-    return '[%s]%s %s%s%s (%s)%s' % (act,n,sign,self.get_value(),s,self.typ,cond)
+    return '[%s]%s%s %s%s%s (%s)%s' % (act,n,eff,sign,self.get_value(),s,self.typ,cond)
 
   # @return (str)
   def __str__(self):
@@ -552,6 +559,7 @@ class Bonus(Field):
     l.append('   type | %s' % self.typ)
     l.append(' revert | %s' % ('change','same')[self.last==self.active])
     l.append('  stats | %s' % ','.join(sorted(self.stats)))
+    l.append(' usedby | %s' % ','.join(sorted(self.usedby)))
     l.append('conditn | %s' % self.condition)
     l.append('   text | %s' % self.text)
     return '\n'.join(l)
@@ -573,12 +581,12 @@ class Duration(object):
       ('m','mi','min','mins','minute','minutes') : 10,
       ('h','hr','hrs','hour','hours') : 600,
       ('d','day','days') : 14400,
-      ('y','yr','yrs','year','years') : 5259600,
+      ('y','yr','yrs','year','years') : 5256000,
       ('l','lvl','level') : '$level',
       ('cl','clvl','caster','casterlvl','casterlevel') : '$caster_level'
   }
 
-  NAMES = [(5259600,'yr'),(14400,'day'),(600,'hr'),(10,'min'),(1,'rd')]
+  NAMES = [(5256000,'yr'),(14400,'day'),(600,'hr'),(10,'min'),(1,'rd')]
 
   # @param s (str)
   # @return (bool) whether the input string is an int
@@ -614,7 +622,7 @@ class Duration(object):
       i += 1
     return (s[:i] or '1',s[i:])
 
-  # @param s (str) full duration e.g. 1+1/CL
+  # @param s (str,int) full duration e.g. 1+1/CL
   # @return (str) input converted to valid python expression to be eval()
   @staticmethod
   def to_rds(s):
@@ -647,13 +655,15 @@ class Duration(object):
 
     return '+'.join(rds)
 
-  # @param s (str) text to parse
+  # @param s (str,int,Duration) text to parse
   # @param char (Character)
   # @return (int) number of rounds
   # @raise ValueError if we need a Character but don't have one
   @staticmethod
   def parse(s,char):
 
+    if isinstance(s,Duration):
+      return (str(s),s.rounds)
     s = Duration.to_rds(s)
 
     # expand $level and $caster_level
@@ -665,12 +675,13 @@ class Duration(object):
 
     return (s,eval(s))
 
-  # @param dur (str) [None] the duration text to parse (None = infinite)
+  # @param dur (str,int) [None] the duration text to parse (None = infinite)
   # @param char (Character) [None]
   def __init__(self,dur=None,char=None):
 
     (self.raw,self.original) = Duration.parse(dur,char)
     self.rounds = self.original
+    self.char = char
 
   # @param dur (int,Duration) [1] value to subtract from remaining time
   # @return (bool) True if this Duration has expired
@@ -684,17 +695,102 @@ class Duration(object):
 
     if self.rounds==Duration.INF:
       return False
+    if dur==Duration.INF:
+      dur = self.rounds
+
     self.rounds = max(0,self.rounds-dur)
-    return self.expired()
+    return self.is_expired()
 
   # @return (bool) if we're expired
-  def expired(self):
-
+  def is_expired(self):
     return self.rounds==0
 
+  # reset this duration back to its original value
   def reset(self):
-
     self.rounds = self.original
+
+  # expire ourself
+  def expire(self):
+    self.rounds = 0
+
+  # @return (Duration) time elapsed since creation (e.g. via advance() calls)
+  def elapsed(self):
+    return Duration(self.original)-self
+
+  # @return (Duration)
+  def copy(self):
+
+    new = Duration()
+    for var in ('raw','original','rounds','char'):
+      setattr(new,var,getattr(self,var))
+    return new
+
+  # @param other (object)
+  # @return (bool)
+  def __eq__(self,other):
+
+    if isinstance(other,int):
+      return self.rounds==other
+    elif isinstance(other,Duration):
+      return self.rounds==other.rounds
+    return NotImplemented
+
+  def __lt__(self,other):
+
+    if isinstance(other,int):
+      return self.rounds<other
+    elif isinstance(other,Duration):
+      return self.rounds<other.rounds
+    return NotImplemented
+
+  def __add__(self,other):
+
+    if isinstance(other,int):
+      other = Duration(other)
+    if not isinstance(other,Duration):
+      return NotImplemented
+    
+    new = self.copy()
+    if self.rounds==Duration.INF or other.rounds==Duration.INF:
+      new.rounds = Duration.INF
+    else:
+      new.rounds = self.rounds+other.rounds
+    return new
+  
+  def __radd__(self,other):
+    return self.__add__(other)
+  
+  def __sub__(self,other):
+
+    if isinstance(other,int):
+      other = Duration(other)
+    if not isinstance(other,Duration):
+      return NotImplemented
+    
+    new = self.copy()
+    if self.rounds==Duration.INF:
+      new.rounds = Duration.INF
+    elif other.rounds==Duration.INF:
+      new.rounds = 0
+    else:
+      new.rounds = self.rounds-other.rounds
+    return new
+  
+  def __rsub__(self,other):
+
+    if isinstance(other,int):
+      other = Duration(other)
+    if not isinstance(other,Duration):
+      return NotImplemented
+    
+    new = self.copy()
+    if other.rounds==Duration.INF:
+      new.rounds = Duration.INF
+    elif self.rounds==Duration.INF:
+      new.rounds = 0
+    else:
+      new.rounds = other.rounds-self.rounds
+    return new
 
   # decompose into sum of years, days, hours, minutes, rounds
   # @return (str)
@@ -702,14 +798,20 @@ class Duration(object):
 
     if self.rounds==Duration.INF:
       return 'infinite'
+    
+    if self.rounds==0:
+      return 'expired'
 
     s = []
     x = self.rounds
     for (num,name) in Duration.NAMES:
-      if num<x:
-        s.append('%s%s' % (x/num,name))
+      if num<=x:
+        s.append('%s%s' % (x//num,name))
         x = x%num
     return '+'.join(s)
+  
+  def __repr__(self):
+    return '<Duration %s>' % str(self)
 
 ###############################################################################
 # Effect class
@@ -720,23 +822,27 @@ class Duration(object):
 
 class Effect(Field):
 
+  FIELDS = OrderedDict([
+      ('name',str),
+      ('bonuses',list),
+      ('duration',Duration),
+      ('text',str),
+  ])
+
   # @param name (str)
   # @param bonuses (str,list of str) bonuses conferred by this Effect
   # @param duration (Duration) [None] defaults to infinite
   # @param text (str) [None]
-  # @param active (None,bool) whether this Effect is active
-  #   if bool, our bonuses will get toggled; if None they won't
-  #
-  # @rase TypeError on duration
-  def __init__(self,name,bonuses,duration=None,text=None,active=None):
+  # @param active (bool) whether this Effect is active (toggles our bonuses)
+  # @rasie TypeError on duration
+  def __init__(self,name,bonuses,duration=None,text=None,active=True):
 
     self.name = name
     self.bonuses = bonuses if isinstance(bonuses,list) else [bonuses]
     self.duration = duration or Duration()
-    self.text = text
-    self.active = active
+    self.text = text or ''
 
-    self.last = active
+    self.last = self.duration.copy()
     self.char = None
 
     if not isinstance(self.duration,Duration):
@@ -747,14 +853,10 @@ class Effect(Field):
   def plug(self,char):
 
     for name in self.bonuses:
-      bonus = char.bonuses[name]
-      bonus.usedby.add(self.name)
-      if self.active is not None:
-        if self.active:
-          bonus.on()
-        else:
-          bonus.off()
+      char.bonuses[name].usedby.add(self.name)
+
     self.char = char
+    self.calc(force=True)
 
   # @raise RuntimeError if plug() wasn't called first
   def unplug(self):
@@ -763,63 +865,93 @@ class Effect(Field):
       raise RuntimeError('plug() must be called before unplug()')
 
     for name in self.bonuses:
-      bonus = char.bonuses[name]
+      bonus = self.char.bonuses[name]
       bonus.usedby.remove(self.name)
       bonus.off()
     self.char = None
 
-  # @return (bool) if not manually set, tracks duration
+  # update our bonuses
+  # @param force (bool) if False, only update if it looks like we changed
+  def calc(self,force=False):
+
+    if force or self.duration!=self.last:
+      for name in self.bonuses:
+        self.char.bonuses[name].toggle(self.is_active())
+
+  # advance our duration
+  # @param dur (Duration,int,str) [1] the duration to advance forward
+  # @return (bool) if we're expired after the advance
+  def advance(self,dur=1):
+
+    last = self.duration.copy()
+    self.duration.advance(Duration(dur))
+    self.last = last
+    self.calc()
+    return not self.is_active()
+
+  # @return (bool) if our duration hasn't expired
   def is_active(self):
+    return not self.duration.is_expired()
 
-    if self.active is not None:
-      return self.active
-    return not self.duration.expired()
+  # @return (bool) if we're permanent
+  def is_permanent(self):
+    return self.duration.rounds==Duration.INF
 
-  def on(self):
-    self.toggle(True)
+  # make our duration infinite (i.e. activate this effect)
+  def make_permanent(self):
 
-  def off(self):
-    self.toggle(False)
+    self.last = self.duration.copy()
+    self.duration = Duration()
+    self.calc()
 
-  # @param new (bool)
-  def toggle(self,new):
+  # expire our duration
+  def make_expired(self):
 
-    self.last = self.active
-    self.active = new
-    for name in self.bonuses:
-      self.char.bonuses[name].toggle(new)
+    self.last = self.duration.copy()
+    self.duration.expire()
+    self.calc()
 
-  # see Bonus.revert()
+  # return to our original duration
+  def reset(self):
+    self.last = self.duration.copy()
+    self.duration.reset()
+    self.calc()
+
   def revert(self):
 
-    self.active = self.last
-    for name in self.bonuses:
-      self.char.bonuses[name].revert()
+    if self.duration==self.last:
+      return
+    (self.duration,self.last) = (self.last,self.duration)
+    self.calc()
 
   # looks like: {+} NAME DURATION BONUSES
   # can also start with {-} or {?}
   # @return (str)
   def __str__(self):
 
-    actives = [b.active for b in self.bonuses]
+    actives = [self.char.bonuses[b].active for b in self.bonuses]
     if all(actives):
       act = '+'
     elif any(actives):
       act = '?'
     else:
       act = '-'
-    names = [b.name for b in self.bonuses]
-    return '{%s} %s %s (%s)' % (act,self.name,self.duration,','.join(names))
+    return '{%s} %s %s (%s)' % (act,self.name,self.duration,
+        ','.join(self.bonuses))
 
   # @return (str)
   def str_all(self):
 
     l =      ['duration | %s' % self.duration]
-    l.extend([' bonuses | %s' % b for b in self.bonuses])
-    l.append( '  active | %s/%s (init: %s)' % (
-        len([b for b in self.bonuses if b.active]),
-        len(self.bonuses),
-        {True:'+',False:'-',None:'='}[self.active]
+    l.append( 'original | %s' % Duration(self.duration.original))
+    if not self.duration.elapsed().is_expired():
+      l.append( ' elapsed | %s' % self.duration.elapsed())
+    bonuses = [self.char.bonuses[b] for b in self.bonuses]
+    l.extend(['   bonus | %s' % b for b in bonuses])
+    l.append( '  active | %s (%s/%s)' % (
+        self.is_active(),
+        len([b for b in bonuses if b.active]),
+        len(bonuses)
     ))
     l.append( '    text | '+self.text)
     return '\n'.join(l)

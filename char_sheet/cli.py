@@ -335,7 +335,8 @@ class CLI(cmd.Cmd):
       func = self.exported[args[0]]
       if isinstance(func,dict):
         if len(args)<2 or args[1] not in func:
-          print('*** Unknown or missing sub-command')
+          print('*** Missing sub-command (%s SUBCMD)' % args[0])
+          print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
           return
         func = func[args[1]]
 
@@ -456,17 +457,18 @@ class CLI(cmd.Cmd):
       val = self.exported[args[0]]
       if isinstance(val,dict):
         if len(args)<2:
-          print('Missing sub-command')
+          print('*** Missing sub-command (%s SUBCMD)' % args[0])
+          print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
           return
         elif args[1] in val:
           (func,args) = (val[args[1]],args[2:])
         else:
-          print('Unknown sub-command "%s"' % args[1])
+          print('*** Unknown sub-command "%s"' % args[1])
           return
       else:
         (func,args) = (val,args[1:])
     else:
-      print('Unknown command "%s"' % args[0])
+      print('*** Unknown command "%s"' % args[0])
       return
 
     # check for matching args/kwargs and print error+signature if failed
@@ -541,6 +543,7 @@ class CLI(cmd.Cmd):
     self.exported = {name:getattr(char,name) for name in char.export}
 
     # sub commands e.g. "set_stat"
+    self.exported_sub = set()
     funcs = inspect.getmembers(char,inspect.ismethod)
     for prefix in char.export_prefix:
       self.exported[prefix] = {}
@@ -548,6 +551,7 @@ class CLI(cmd.Cmd):
         if name.startswith(prefix+'_'):
           name = name[len(prefix)+1:]
           self.exported[prefix][name] = func
+          self.exported_sub.add(name)
 
     # basic aliases
     for (alias,target) in char.export_alias.items():

@@ -87,7 +87,7 @@
 
 # ===== ui =====
 # [TODO] pre-made/custom views (e.g. show all abilities)
-# [TODO] regex searching
+# [TODO] search filters (e.g. get effect * where duration>0)
 # [TODO] strip tabs/newlines from input
 # [TODO] report modification to the cli somehow (add,set,upgrade...) decorator?
 # [TODO] incrementing? at least for skill ranks?
@@ -96,7 +96,7 @@
 # [TODO] make more commands accept lists ("all" command specifically)
 # [TODO] ability to rename things
 
-import os,time,inspect,importlib
+import os,re,time,inspect,importlib
 from collections import OrderedDict
 from functools import reduce
 
@@ -456,17 +456,19 @@ class Character(object):
     with open(name,'w') as f:
       f.write(s)
 
-  def search(self,name,ignore='_'):
+  def search(self,name,ignore='_',case=False):
     """
     search all objects for one with a matching name
-      - name (string) the search term
-      - [ignore = '_'] (string) exclude results starting with this string
+      - name (string) the search term, supports python regex
+      - [ignore = "_"] (string) exclude results starting with this string
+      - [case = False] (bool) respect upper/lower case
     """
 
+    r = re.compile(name,0 if case else re.IGNORECASE)
     matches = []
     for (l,d) in self.letters.items():
       for (n,obj) in getattr(self,d).items():
-        if name in n and (ignore=='*' or not n.startswith(ignore)):
+        if r.search(n) and (ignore=='*' or not n.startswith(ignore)):
           matches.append('%s | %s' % (l,obj.str_search()))
     return '\n'.join(matches)
 
@@ -515,7 +517,7 @@ class Character(object):
   def advance(self,duration=1,effects='*'):
     """
     advance Effects and check for their expiry
-      - duration (Duration) [1rd] amount of time to move forward
+      - [duration = 1rd] (Duration) amount of time to move forward
         - bare integers are interpreted as rounds
         - valid units (e.g. 5min):
           - rd  = rounds
@@ -525,7 +527,7 @@ class Character(object):
           - yr  = years
         - units can be combined with a plus sign (e.g. 1min+5rd)
         - passing "inf" will expire all Effects that aren't permanent
-      - effects (string,list) [*] effect(s) to advance (defaults to all)
+      - [effects = *] (string,list) effect(s) to advance (defaults to all)
     """
 
     if effects=='*':
@@ -690,7 +692,7 @@ class Character(object):
       - name (string)
       - bonuses (string,list) the bonuses created by this Effect
       - [duration = None] (string) see "help advance" (None = infinite)
-      - text (string) [None]
+      - [text = None] (string)
       - [active = True] (bool) turn on/off all our bonuses
     """
 
@@ -847,7 +849,7 @@ class Character(object):
     create an Effect and its bonuses
       - name (string)
       - [duration = None] (string) see "help advance" (None = infinite)
-      - text (string) [None]
+      - [text = None] (string)
       - [active = True] (bool) turn on/off all our bonuses
     """
 

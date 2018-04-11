@@ -87,6 +87,7 @@ import sys,os,pickle,cmd,inspect,traceback
 
 import environ
 import dnd.char_sheet.char as char
+from dnd.char_sheet.dec import arbargs
 
 # keep running forever unless we get EOF from the CLI (i.e. a clean return)
 # if we get a KeyboardInterrupt or EOFError resume the loop
@@ -160,9 +161,15 @@ class CLI(cmd.Cmd):
     print(self.last_trace)
 
   def do_args(self,args):
-    """[DEV] print args"""
+    """[DEV] toggle printing args"""
 
-    print(args)
+    self.debug['args'] = not self.debug['args']
+    print('Print args: %s' % self.debug['args'])
+
+  def do_nop(self,args):
+    """[DEV] do nothing"""
+
+    return
 
   def old_load(self,args):
 
@@ -220,6 +227,10 @@ class CLI(cmd.Cmd):
     if fname:
       self.do_load([fname])
 
+    self.debug = {
+        'args' : False
+    }
+
   # we expect this to get overriden by our Character
   # @return (str)
   def get_prompt(self):
@@ -245,7 +256,15 @@ class CLI(cmd.Cmd):
   #   #2 (str) the original string
   def parseline(self,line):
 
-    (args,kwargs) = self.get_args(line)
+    try:
+      (args,kwargs) = self.get_args(line)
+      if self.debug['args']:
+        print(args)
+        print(kwargs)
+        print('')
+    except ArgsError as e:
+      print('*** ArgsError: %s' % e.args[0])
+      args = []
     return (args[0] if args else '',args[1:],line)
 
   # @param line (str) a command string
@@ -263,7 +282,8 @@ class CLI(cmd.Cmd):
     last_quoted = False
     to_lower = lower
     s = ''
-    for (i,c) in enumerate(line.strip()+' '):
+    key = None
+    for c in (line.strip()+' '):
 
       # separate on spaces unless inside quotes
       if c==' ':
@@ -271,24 +291,20 @@ class CLI(cmd.Cmd):
           s += c
         elif s:
           if not last_quoted and split and ',' in s:
-            x = s.split(',')
+            s = s.split(',')
 
-            # differentiate args and kwargs
-            if '=' in x[0]:
-              (key,x[0]) = x[0].split('=')
-              kwargs[key] = x
-            else:
-              args.append(x)
+          # differentiate args and kwargs
+          if key:
+            kwargs[key] = s
+            key = None
           else:
+            args.append(s)
 
-            #differentiate args and kwargs
-            if '=' in s:
-              (key,x) = s.split('=')
-              kwargs[key] = x
-            else:
-              args.append(s)
           last_quoted = False
           s = ''
+
+        elif key:
+          raise ArgsError(None,'keyword values cannot be blank')
 
       # keep track of quotes
       elif c=='"':
@@ -299,13 +315,20 @@ class CLI(cmd.Cmd):
           quote = True
           last_quoted = True
           to_lower = False
+      
+      # keep track of kwargs
+      elif c=='=' and not quote:
+        if key:
+          raise ArgsError(None,'you must quote "=" in keyword values')
+        if not s:
+          raise ArgsError(None,'keyword names cannot be blank')
+        key = s
+        s = ''
+        last_quoted = False
 
       # add characters to the current string
       else:
-        if to_lower:
-          s += c.lower()
-        else:
-          s += c
+        s += c.lower() if to_lower else c
 
     return (args,kwargs)
 
@@ -360,6 +383,7 @@ class CLI(cmd.Cmd):
           lines = [x[leading:] for x in lines]
         print('#')
         print('\n'.join(['# '+x for x in lines]))
+        return
 
     # if the requested function is defined here rather than in our Character
     # just use the cmd.Cmd built-in help method
@@ -450,7 +474,10 @@ class CLI(cmd.Cmd):
   # @param line (str) raw command text
   def default(self,line):
 
-    (args,kwargs) = self.get_args(line)
+    try:
+      (args,kwargs) = self.get_args(line)
+    except ArgsError as e:
+      return
 
     # pull command or sub-command function from exported
     if args[0] in self.exported:
@@ -473,7 +500,7 @@ class CLI(cmd.Cmd):
 
     # check for matching args/kwargs and print error+signature if failed
     try:
-      self.check_args(func,args,kwargs)
+      self.check_args(func,args,kwargs,getattr(func,'_arbargs',False))
       result = func(*args,**kwargs)
     except ArgsError as e:
       print('*** ArgsError: %s' % e.args[0])
@@ -495,12 +522,15 @@ class CLI(cmd.Cmd):
   # @param func (func) the function to use as reference
   # @param user_args (list)
   # @param user_kwargs (dict)
+  # @param arb (bool) whether the function accepts arbitrary args
   # @raise ArgsError
-  def check_args(self,func,user_args,user_kwargs):
+  def check_args(self,func,user_args,user_kwargs,arb=False):
 
     (sig,args,kwargs) = self.get_sig(func)
     if len(user_args)<len(args):
       raise ArgsError(sig,'missing required args')
+    if arb:
+      return
 
     if len(user_args)>len(args+kwargs):
       raise ArgsError(sig,'too many args')

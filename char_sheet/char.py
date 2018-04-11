@@ -87,7 +87,6 @@
 
 # ===== ui =====
 # [TODO] pre-made/custom views (e.g. show all abilities)
-# [TODO] search filters (e.g. get effect * where duration>0)
 # [TODO] strip tabs/newlines from input
 # [TODO] report modification to the cli somehow (add,set,upgrade...) decorator?
 # [TODO] incrementing? at least for skill ranks?
@@ -104,6 +103,7 @@ from dnd.dice import Dice
 from dnd.duration import Duration
 from dnd.char_sheet.fields import *
 from dnd.char_sheet.errors import *
+from dnd.char_sheet.dec import arbargs
 
 ###############################################################################
 # Universe class
@@ -456,20 +456,70 @@ class Character(object):
     with open(name,'w') as f:
       f.write(s)
 
-  def search(self,name,ignore='_',case=False):
+  @arbargs
+  def search(self,name='.*',fields=None,exclude='_',ignore_case=True,
+      include_missing=False,**kwargs):
     """
     search all objects for one with a matching name
-      - name (string) the search term, supports python regex
-      - [ignore = "_"] (string) exclude results starting with this string
-      - [case = False] (bool) respect upper/lower case
+      - [name = ".*"] (string) the search term, supports python regex
+        - defaults to matching everything
+      - [fields = ALL] (string,list) the Fields to include in the results
+      - [exclude = "_"] (string) exclude results that start with this
+        - specify "*" to include everything
+      - [ignore_case = True] (bool) ignore upper/lower case
+      - [include_missing = False] (bool) show fields missing kwargs (see below)
+
+    any additional keyword arguments are matched against instance variables:
+      - casts the field to a string, then does regex matching
+        - search root=True
+        - search fields=stat value=^[^0]
+      - functions starting with "is_" are automatically called
+        - search fields=effect is_active=True
+      - can perform custom evaluations where @ is the value of the variable
+        - search fields=stat value="@ != 0"
+        - search fields=effect duration="@ > 5"
+        - search fields=bonus usedby="not @"
     """
 
-    r = re.compile(name,0 if case else re.IGNORECASE)
+    case = re.IGNORECASE if ignore_case else 0
+
+    fields = fields or list(self.letters.values())
+    if not isinstance(fields,list):
+      fields = [fields]
+    for field in fields:
+      if field not in self.letters.values():
+        raise ValueError('unknown field type "%s"' % field)
+
+    attrs = {
+        attr: (s if '@' in s else re.compile(s,case))
+        for (attr,s) in kwargs.items()
+    }
+
+    r = re.compile(name,case)
     matches = []
     for (l,d) in self.letters.items():
+      if d not in fields:
+        continue
       for (n,obj) in getattr(self,d).items():
-        if r.search(n) and (ignore=='*' or not n.startswith(ignore)):
-          matches.append('%s | %s' % (l,obj.str_search()))
+        if r.search(n) and (exclude=='*' or not n.startswith(exclude)):
+          match = True
+          for (name,key) in attrs.items():
+            if hasattr(obj,name):
+              attr = getattr(obj,name)
+              if callable(attr) and name.startswith('is_'):
+                attr = attr()
+              if isinstance(key,str):
+                if not eval(key.replace('@','attr')):
+                  match=False
+                  break
+              elif not key.search(str(attr)):
+                match=False
+                break
+            elif not include_missing:
+              match = False
+              break
+          if match:
+            matches.append('%s | %s' % (l,obj.str_search()))
     return '\n'.join(matches)
 
   # @raise KeyError if typ does not exist

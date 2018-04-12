@@ -47,9 +47,10 @@
 #
 # implemented types: stat bonus effect text
 #
-# load
-# new
-# save
+# help [command [sub-command]]
+# load [filename]
+# new [system]
+# save [filename]
 #
 # search [name]
 # get [type] [name]
@@ -74,7 +75,7 @@
 
 # ===== TODO =====
 #
-# [TODO] help/list aliases
+# [TODO] help/list aliases and/or pre-made/custom views (show all abilities)
 # [TODO] autocompletions
 # [TODO] consider managing multiple characters
 # [TODO] better exception messages, especially for num args
@@ -89,8 +90,12 @@ import environ
 import dnd.char_sheet.char as char
 from dnd.char_sheet.dec import arbargs
 
-# keep running forever unless we get EOF from the CLI (i.e. a clean return)
-# if we get a KeyboardInterrupt or EOFError resume the loop
+###############################################################################
+# main loop
+#   - keep running forever unless we get EOF from the CLI (i.e. a clean return)
+#   - if we get a KeyboardInterrupt or EOFError resume the loop
+###############################################################################
+
 # @param fname (None,str) [None] the file to open
 def main(fname=None):
 
@@ -104,6 +109,10 @@ def main(fname=None):
     except (KeyboardInterrupt,EOFError):
       print('\n*** Use Ctrl+D / EOF at the main prompt to exit')
       pass
+
+###############################################################################
+# exceptions and connectors
+###############################################################################
 
 # thrown when the user passes non-matching arguments to a command
 # @param sig (str) the signature of the target command
@@ -137,79 +146,9 @@ class Prompt(object):
 
 class CLI(cmd.Cmd):
 
-############################ <DEV>
-
-  def do_eval(self,args):
-    """[DEV] run eval() on input"""
-
-    try:
-      print(eval(' '.join(args)))
-    except:
-      print(traceback.format_exc())
-
-  def do_exec(self,args):
-    """[DEV] run exec() on input"""
-
-    try:
-      exec(' '.join(args))
-    except:
-      print(traceback.format_exc())
-
-  def do_trace(self,args):
-    """[DEV] print traceback for last exception"""
-
-    print(self.last_trace)
-
-  def do_args(self,args):
-    """[DEV] toggle printing args"""
-
-    self.debug['args'] = not self.debug['args']
-    print('Print args: %s' % self.debug['args'])
-
-  def do_nop(self,args):
-    """[DEV] do nothing"""
-
-    return
-
-  def old_load(self,args):
-
-    if not args:
-      print('Missing file name')
-      return
-    if not self.overwrite():
-      return
-    if not os.path.isfile(args[0]):
-      print('Unable to read "%s"' % args[0])
-      return
-    try:
-      with open(args[0],'rb') as f:
-        self.plug(pickle.load(f))
-        self.fname = args[0]
-        self.modified = False
-    except Exception:
-      print('Unable to unpickle "%s"' % args[0])
-
-  def old_save(self,args):
-
-    fname = self.fname if not args else ' '.join(args)
-    if not fname:
-      fname = input('Enter a file name: ')
-    try:
-      with open(fname,'a') as f:
-        pass
-    except:
-      print('Unable to write "%s"' % fname)
-      return
-    try:
-      with open(fname,'wb') as f:
-        pickle.dump(self.char,f,-1)
-      self.fname = fname
-      self.modified = False
-      return False
-    except:
-      print('Unable to pickle character')
-
-############################ </DEV>
+###############################################################################
+# CLI overrides
+###############################################################################
 
   # @param fname (None,str) file name to load if not None
   def __init__(self,fname):
@@ -249,6 +188,10 @@ class CLI(cmd.Cmd):
       prompt = prompt[0]
     return prompt
 
+  # just print the prompt again if the user enters nothing
+  def emptyline(self):
+    pass
+
   # @param line (str)
   # @return (3-tuple)
   #   #0 (str) command name
@@ -266,6 +209,67 @@ class CLI(cmd.Cmd):
       print('*** ArgsError: %s' % e.args[0])
       args = []
     return (args[0] if args else '',args[1:],line)
+
+  # if the commnd doesn't match any defined in this file, use those exported
+  # by our Character instead; also checks for argument matching
+  # @param line (str) raw command text
+  def default(self,line):
+
+    try:
+      (args,kwargs) = self.get_args(line)
+    except ArgsError as e:
+      return
+
+    # pull command or sub-command function from exported
+    if args[0] in self.exported:
+      val = self.exported[args[0]]
+      if isinstance(val,dict):
+        if len(args)<2:
+          print('*** Missing sub-command (%s SUBCMD)' % args[0])
+          print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
+          return
+        elif args[1] in val:
+          (func,args) = (val[args[1]],args[2:])
+        else:
+          print('*** Unknown sub-command "%s"' % args[1])
+          return
+      else:
+        (func,args) = (val,args[1:])
+    else:
+      print('*** Unknown command "%s"' % args[0])
+      return
+
+    # check for matching args/kwargs and print error+signature if failed
+    try:
+      self.check_args(func,args,kwargs,getattr(func,'_arbargs',False))
+      result = func(*args,**kwargs)
+    except ArgsError as e:
+      print('*** ArgsError: %s' % e.args[0])
+      print('    %s' % e.sig)
+      return
+
+    # print generic exceptions and log them in last_trace for later
+    except:
+      s = traceback.format_exc()
+      self.last_trace = s.strip()
+      print('*** '+s.split('\n')[-2])
+      return
+
+    # print anything returned by the function
+    if result:
+      print(result)
+
+  # add an extra newline after command output so the interface looks better
+  # @param stop (bool)
+  # @param line (str)
+  def postcmd(self,stop,line):
+
+    print('')
+    return stop
+
+###############################################################################
+# helper functions
+###############################################################################
 
   # @param line (str) a command string
   # @param lower (bool) [False] whether to lowercase everything
@@ -332,17 +336,120 @@ class CLI(cmd.Cmd):
 
     return (args,kwargs)
 
-  # just print the prompt again if the user enters nothing
-  def emptyline(self):
-    pass
+  # compare user-provided args/kwargs to the command signature
+  # @param func (func) the function to use as reference
+  # @param user_args (list)
+  # @param user_kwargs (dict)
+  # @param arb (bool) whether the function accepts arbitrary args
+  # @raise ArgsError
+  def check_args(self,func,user_args,user_kwargs,arb=False):
 
-  # add an extra newline after command output so the interface looks better
-  # @param stop (bool)
-  # @param line (str)
-  def postcmd(self,stop,line):
+    (sig,args,kwargs) = self.get_sig(func)
+    if len(user_args)<len(args):
+      raise ArgsError(sig,'missing required args')
+    if arb:
+      return
 
-    print('')
-    return stop
+    if len(user_args)>len(args+kwargs):
+      raise ArgsError(sig,'too many args')
+
+    for key in user_kwargs:
+      if key not in kwargs:
+        raise ArgsError(sig,'unknown keyword "%s"' % key)
+
+  # inspect a function and parse out its signature
+  # @param func (func)
+  # @return (3-tuple)
+  #   #0 (str) user-readable signature
+  #   #1 (list) argument names
+  #   #2 (list) keyword argument names
+  def get_sig(self,func):
+
+    (args,varargs,keywords,defaults) = inspect.getargspec(func)
+    args.remove('self')
+    split = -len(defaults) if defaults else 0
+    kwargs = args[split:] if split else []
+    args = args[:split] if split else args
+
+    # account for sub commands e.g. "set_stat"
+    name = func.__name__.replace('_',' ')
+
+    opts = ['[%s]' % s for s in kwargs]
+    space = ' ' if args and opts else ''
+    sig = '(%s) %s%s%s' % (name,' '.join(args),space,' '.join(opts))
+
+    return (sig,args,kwargs)
+
+  # pull in exported commands and aliases from the Character
+  # @param char (Character)
+  def plug(self,char):
+
+    self.unplug()
+    self.char = char
+
+    # basic commands
+    self.exported = {name:getattr(char,name) for name in char.export}
+
+    # sub commands e.g. "set_stat"
+    self.exported_sub = set()
+    funcs = inspect.getmembers(char,inspect.ismethod)
+    for prefix in char.export_prefix:
+      self.exported[prefix] = {}
+      for (name,func) in funcs:
+        if name.startswith(prefix+'_'):
+          name = name[len(prefix)+1:]
+          self.exported[prefix][name] = func
+          self.exported_sub.add(name)
+
+    # basic aliases
+    for (alias,target) in char.export_alias.items():
+      self.exported[alias] = self.exported[target]
+
+    # sub-command aliases
+    for (alias,target) in char.export_sub_alias.items():
+      for prefix in char.export_prefix:
+        self.exported[prefix][alias] = self.exported[prefix][target]
+
+  def unplug(self):
+
+    self.char = None
+    self.exported = {}
+
+  # @param fname (str) the destination file
+  # @return (bool) if saving was successful
+  def save(self,fname=None):
+
+    if not fname:
+      fname = input('Enter a file name: ')
+    try:
+      with open(fname,'a') as f:
+        pass
+    except:
+      print('Unable to write to "%s"' % fname)
+      return False
+
+    self.char.save(fname)
+    self.fname = fname
+    self.modified = False
+
+    return True
+
+  # check if the character has been modified and prompt for save
+  # @return (bool) if it's okay to trash our current character data
+  def overwrite(self):
+
+    if self.char is None or not self.modified:
+      return True
+    choice = input('\nSave changes to current char? (Y/n/c): ').lower()
+    if choice in ('','y','yes'):
+      return self.save()==False
+    if choice in ('n','no'):
+      return True
+    return False
+
+###############################################################################
+# user commands
+###############################################################################
 
   def do_EOF(self,args):
     """exit the CLI (prompts for save)"""
@@ -437,166 +544,6 @@ class CLI(cmd.Cmd):
     if self.overwrite():
       self.unplug()
 
-  # @param fname (str) the destination file
-  # @return (bool) if saving was successful
-  def save(self,fname=None):
-
-    if not fname:
-      fname = input('Enter a file name: ')
-    try:
-      with open(fname,'a') as f:
-        pass
-    except:
-      print('Unable to write to "%s"' % fname)
-      return False
-
-    self.char.save(fname)
-    self.fname = fname
-    self.modified = False
-
-    return True
-
-  # check if the character has been modified and prompt for save
-  # @return (bool) if it's okay to trash our current character data
-  def overwrite(self):
-
-    if self.char is None or not self.modified:
-      return True
-    choice = input('\nSave changes to current char? (Y/n/c): ').lower()
-    if choice in ('','y','yes'):
-      return self.save()==False
-    if choice in ('n','no'):
-      return True
-    return False
-
-  # if the commnd doesn't match any defined in this file, use those exported
-  # by our Character instead; also checks for argument matching
-  # @param line (str) raw command text
-  def default(self,line):
-
-    try:
-      (args,kwargs) = self.get_args(line)
-    except ArgsError as e:
-      return
-
-    # pull command or sub-command function from exported
-    if args[0] in self.exported:
-      val = self.exported[args[0]]
-      if isinstance(val,dict):
-        if len(args)<2:
-          print('*** Missing sub-command (%s SUBCMD)' % args[0])
-          print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
-          return
-        elif args[1] in val:
-          (func,args) = (val[args[1]],args[2:])
-        else:
-          print('*** Unknown sub-command "%s"' % args[1])
-          return
-      else:
-        (func,args) = (val,args[1:])
-    else:
-      print('*** Unknown command "%s"' % args[0])
-      return
-
-    # check for matching args/kwargs and print error+signature if failed
-    try:
-      self.check_args(func,args,kwargs,getattr(func,'_arbargs',False))
-      result = func(*args,**kwargs)
-    except ArgsError as e:
-      print('*** ArgsError: %s' % e.args[0])
-      print('    %s' % e.sig)
-      return
-
-    # print generic exceptions and log them in last_trace for later
-    except:
-      s = traceback.format_exc()
-      self.last_trace = s.strip()
-      print('*** '+s.split('\n')[-2])
-      return
-
-    # print anything returned by the function
-    if result:
-      print(result)
-
-  # compare user-provided args/kwargs to the command signature
-  # @param func (func) the function to use as reference
-  # @param user_args (list)
-  # @param user_kwargs (dict)
-  # @param arb (bool) whether the function accepts arbitrary args
-  # @raise ArgsError
-  def check_args(self,func,user_args,user_kwargs,arb=False):
-
-    (sig,args,kwargs) = self.get_sig(func)
-    if len(user_args)<len(args):
-      raise ArgsError(sig,'missing required args')
-    if arb:
-      return
-
-    if len(user_args)>len(args+kwargs):
-      raise ArgsError(sig,'too many args')
-
-    for key in user_kwargs:
-      if key not in kwargs:
-        raise ArgsError(sig,'unknown keyword "%s"' % key)
-
-  # inspect a function and parse out its signature
-  # @param func (func)
-  # @return (3-tuple)
-  #   #0 (str) user-readable signature
-  #   #1 (list) argument names
-  #   #2 (list) keyword argument names
-  def get_sig(self,func):
-
-    (args,varargs,keywords,defaults) = inspect.getargspec(func)
-    args.remove('self')
-    split = -len(defaults) if defaults else 0
-    kwargs = args[split:] if split else []
-    args = args[:split] if split else args
-
-    # account for sub commands e.g. "set_stat"
-    name = func.__name__.replace('_',' ')
-
-    opts = ['[%s]' % s for s in kwargs]
-    space = ' ' if args and opts else ''
-    sig = '(%s) %s%s%s' % (name,' '.join(args),space,' '.join(opts))
-
-    return (sig,args,kwargs)
-
-  # pull in exported commands and aliases from the Character
-  # @param char (Character)
-  def plug(self,char):
-
-    self.unplug()
-    self.char = char
-
-    # basic commands
-    self.exported = {name:getattr(char,name) for name in char.export}
-
-    # sub commands e.g. "set_stat"
-    self.exported_sub = set()
-    funcs = inspect.getmembers(char,inspect.ismethod)
-    for prefix in char.export_prefix:
-      self.exported[prefix] = {}
-      for (name,func) in funcs:
-        if name.startswith(prefix+'_'):
-          name = name[len(prefix)+1:]
-          self.exported[prefix][name] = func
-          self.exported_sub.add(name)
-
-    # basic aliases
-    for (alias,target) in char.export_alias.items():
-      self.exported[alias] = self.exported[target]
-
-    # sub-command aliases
-    for (alias,target) in char.export_sub_alias.items():
-      for prefix in char.export_prefix:
-        self.exported[prefix][alias] = self.exported[prefix][target]
-
-  def unplug(self):
-
-    self.char = None
-    self.exported = {}
-
   # defaults to a Pathfinder character
   def do_new(self,args):
     """create a new character"""
@@ -614,6 +561,84 @@ class CLI(cmd.Cmd):
 
     self.plug(c)
     self.modified = True
+
+###############################################################################
+# Dev commands
+###############################################################################
+
+  def do_eval(self,args):
+    """[DEV] run eval() on input"""
+
+    try:
+      print(eval(' '.join(args)))
+    except:
+      print(traceback.format_exc())
+
+  def do_exec(self,args):
+    """[DEV] run exec() on input"""
+
+    try:
+      exec(' '.join(args))
+    except:
+      print(traceback.format_exc())
+
+  def do_trace(self,args):
+    """[DEV] print traceback for last exception"""
+
+    print(self.last_trace)
+
+  def do_args(self,args):
+    """[DEV] toggle printing args"""
+
+    self.debug['args'] = not self.debug['args']
+    print('Print args: %s' % self.debug['args'])
+
+  def do_nop(self,args):
+    """[DEV] do nothing"""
+
+    return
+
+  def old_load(self,args):
+
+    if not args:
+      print('Missing file name')
+      return
+    if not self.overwrite():
+      return
+    if not os.path.isfile(args[0]):
+      print('Unable to read "%s"' % args[0])
+      return
+    try:
+      with open(args[0],'rb') as f:
+        self.plug(pickle.load(f))
+        self.fname = args[0]
+        self.modified = False
+    except Exception:
+      print('Unable to unpickle "%s"' % args[0])
+
+  def old_save(self,args):
+
+    fname = self.fname if not args else ' '.join(args)
+    if not fname:
+      fname = input('Enter a file name: ')
+    try:
+      with open(fname,'a') as f:
+        pass
+    except:
+      print('Unable to write "%s"' % fname)
+      return
+    try:
+      with open(fname,'wb') as f:
+        pickle.dump(self.char,f,-1)
+      self.fname = fname
+      self.modified = False
+      return False
+    except:
+      print('Unable to pickle character')
+
+###############################################################################
+# cli invocation hook
+###############################################################################
 
 if __name__=='__main__':
 

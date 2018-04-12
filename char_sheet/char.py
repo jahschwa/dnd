@@ -25,7 +25,7 @@
 
 #    get : g     add : a    set : s      del : d        all : l      reset : r
 # search : ?      on : +    off : -   revert : v    advance : ++    create : c
-#   stat : s   bonus : b   text : t
+#   stat : s   bonus : b   text : t   effect : e
 
 ##### EXAMPLES #####
 
@@ -86,7 +86,6 @@
 # [TODO] save bonus raw to file
 
 # ===== ui =====
-# [TODO] pre-made/custom views (e.g. show all abilities)
 # [TODO] strip tabs/newlines from input
 # [TODO] report modification to the cli somehow (add,set,upgrade...) decorator?
 # [TODO] incrementing? at least for skill ranks?
@@ -94,6 +93,7 @@
 # [TODO] check if you can actually set "active" from the CLI
 # [TODO] make more commands accept lists ("all" command specifically)
 # [TODO] ability to rename things
+# [TODO] tutorial help text
 
 import os,re,time,inspect,importlib
 from collections import OrderedDict

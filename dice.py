@@ -9,7 +9,7 @@ class Dice(object):
   @staticmethod
   def parse(s):
 
-    s = str(s)
+    s = str(s).replace(' ','')
 
     if not reduce(lambda a,b: a and (b.isdigit() or b in 'd+-'),s,True):
       raise ValueError('invalid Dice string "%s"' % s)
@@ -230,7 +230,7 @@ class Dice(object):
 
     sides = sorted(self.dice.items(),key=lambda x:x[1]*(x[0]+1)/2.0,reverse=True)
     s = '+'.join(['%sd%s' % (n,s) for (s,n) in sides]).replace('+-','-')
-    if self.bonus:
+    if self.bonus or not self.dice:
       s += '%s%s' % ('+' if self.bonus>0 else '',self.bonus)
     if s.startswith('+'):
       return s[1:]

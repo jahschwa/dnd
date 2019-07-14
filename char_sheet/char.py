@@ -25,6 +25,7 @@
 
 #    get : g     add : a    set : s      del : d        all : l      reset : r
 # search : ?      on : +    off : -   revert : v    advance : ++    create : c
+#   roll : !
 #   stat : s   bonus : b   text : t   effect : e
 
 ##### EXAMPLES #####
@@ -247,12 +248,25 @@ class Character(object):
       ('i','item'),
       ('a','ability'),
       ('v','event'),
-      ('t','text')])
+      ('t','text'),
+    ])
 
     # register commands
-    self.export = ['search','on','off','revert','get','all','advance','reset']
+    self.export = [
+      'search',
+      'on',
+      'off',
+      'revert',
+      'get',
+      'all',
+      'advance',
+      'reset',
+      'roll',
+    ]
+
     # register commands that have sub commands
-    self.export_prefix = ['add','set','del','create']
+    self.export_prefix = ['add', 'set', 'del', 'create']
+
     # register aliases
     self.export_alias = {
       '?' : 'search',
@@ -266,8 +280,10 @@ class Character(object):
       'd' : 'del',
       '++': 'advance',
       'r' : 'reset',
-      'c' : 'create'
+      'c' : 'create',
+      '!' : 'roll',
     }
+
     # register sub command aliases
     # [TODO] improve and include more objects
     self.export_sub_alias = {a:b for (a,b) in self.letters.items() if a in 'sbet'}
@@ -324,6 +340,18 @@ class Character(object):
   # @return (bool) if bonuses of that type stack
   def _stacks(self,typ):
     return not self.BONUS_STACK or typ in self.BONUS_STACK
+
+  # save this character
+  # @param name (str) file path
+  def save(self,name):
+
+    s = self.__class__.__name__+'\n'
+    for typ in self.letters.values():
+      for obj in getattr(self,typ).values():
+        s += ('%s\t' % obj.__class__.__name__)+'\t'.join(obj.save())+'\n'
+
+    with open(name,'w') as f:
+      f.write(s)
 
 ###############################################################################
 # User input functions
@@ -444,17 +472,34 @@ class Character(object):
 # User commands
 ###############################################################################
 
-  # save this character
-  # @param name (str) file path
-  def save(self,name):
+  @arbargs
+  def roll(self,*args,**kwargs):
+    """
+    roll some dice; if the first argument is a valid stat or list:
+      - stat (string,list) the stat(s) to roll
+    otherwisethe args are a dice string and we roll that:
+      - dice (string) e.g. "d20" "4d6" "3d6+1d4+2"
+    """
 
-    s = self.__class__.__name__+'\n'
-    for typ in self.letters.values():
-      for obj in getattr(self,typ).values():
-        s += ('%s\t' % obj.__class__.__name__)+'\t'.join(obj.save())+'\n'
+    stats = None
+    if isinstance(args[0],list):
+      stats = args[0]
+    elif args[0] in self.stats:
+      stats = [args[0]]
+    else:
+      return NotImplemented
 
-    with open(name,'w') as f:
-      f.write(s)
+    pad = len(max(stats,key=len))
+    for name in stats:
+      s = ('%%-%ss ' % pad) % name
+      stat = self.stats[name]
+      try:
+        s += str(stat.roll())
+      except KeyError:
+        s += 'KeyError'
+      except AttributeError:
+        s += str(Dice('d20').roll()+stat.value)
+      print(s)
 
   @arbargs
   def search(self,name='.*',fields=None,exclude='_',ignore_case=True,

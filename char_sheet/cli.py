@@ -51,6 +51,7 @@
 # load [filename]
 # new [system]
 # save [filename]
+# roll [dice]
 #
 # search [name]
 # get [type] [name]
@@ -79,7 +80,6 @@
 # [TODO] autocompletions
 # [TODO] consider managing multiple characters
 # [TODO] better exception messages, especially for num args
-# [TODO] dice roller
 # [TODO] custom aliases?
 # [TODO] actual modificaion tracking for save prompting
 # [TODO] review load/save logic and kill "old" methods
@@ -89,6 +89,7 @@ import sys,os,pickle,cmd,inspect,traceback
 import environ
 import dnd.char_sheet.char as char
 from dnd.char_sheet.dec import arbargs
+from dnd.dice import Dice
 
 ###############################################################################
 # main loop
@@ -193,71 +194,119 @@ class CLI(cmd.Cmd):
     pass
 
   # @param line (str)
-  # @return (3-tuple)
+  # @return (4-tuple)
   #   #0 (str) command name
   #   #1 (list) args to pass to the command
-  #   #2 (str) the original string
+  #   #2 (dict) kwargs to pass to the command
+  #   #3 (str) the original line
   def parseline(self,line):
 
+    (args,kwargs) = self.get_args(line)
+    if self.debug['args']:
+      print(args)
+      print(kwargs)
+      print('')
+
+    return (args,kwargs)
+
+  # parse input line into args and kwargs,
+  # then try to execute exported character commands
+  # if none match or it returns NotImplemented, execute a self.do_*
+  # if still no match print message and exit via self.default()
+  # @param line (str)
+  def onecmd(self,line):
+
+    if not line:
+      return self.emptyline()
+
     try:
-      (args,kwargs) = self.get_args(line)
-      if self.debug['args']:
-        print(args)
-        print(kwargs)
-        print('')
+      (args,kwargs) = self.parseline(line)
     except ArgsError as e:
       print('*** ArgsError: %s' % e.args[0])
-      args = []
-    return (args[0] if args else '',args[1:],line)
-
-  # if the commnd doesn't match any defined in this file, use those exported
-  # by our Character instead; also checks for argument matching
-  # @param line (str) raw command text
-  def default(self,line):
+      return
 
     try:
-      (args,kwargs) = self.get_args(line)
+      func = self.get_cli_cmd(args)
+      (char_func,char_args) = self.get_char_cmd(args,kwargs,func)
+      if self.debug['args']:
+        print(func)
+        print(char_func)
+        print('')
+      if char_func:
+        self.check_args(char_func,char_args,kwargs,
+            getattr(char_func,'_arbargs',False))
+        result = char_func(*char_args,**kwargs)
+        if result!=NotImplemented:
+          if result:
+            print(result)
+          return
+
+      if func:
+        return func(args[1:])
+
     except ArgsError as e:
+      print('*** ArgsError: %s' % e.args[0])
+      print('    %s' % e.sig)
       return
+
+    except:
+      s = traceback.format_exc()
+      self.last_trace = s.strip()
+      s = s.split('\n')[-2]
+      if '.' in s.split(':')[0]:
+        s = s[s.rindex('.',0,s.index(':'))+1:]
+      print('*** '+s)
+      return
+
+    return self.default(args)
+
+  # @param args (list)
+  # @return (2-tuple)
+  #   #0 (func)
+  #   #1 (list)
+  def get_cli_cmd(self,args):
+
+    try:
+      return getattr(self,'do_'+args[0])
+    except AttributeError:
+      return None
+
+  # @param args (list)
+  # @param kwargs (dict)
+  # @param silent (bool) whether to print errors
+  # @return (2-tuple)
+  #   #0 (func)
+  #   #1 (list)
+  def get_char_cmd(self,args,kwargs,silent):
 
     # pull command or sub-command function from exported
     if args[0] in self.exported:
       val = self.exported[args[0]]
       if isinstance(val,dict):
         if len(args)<2:
-          print('*** Missing sub-command (%s SUBCMD)' % args[0])
-          print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
-          return
+          if not silent:
+            print('*** Missing sub-command (%s SUBCMD)' % args[0])
+            print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
+            return (None,None)
         elif args[1] in val:
           (func,args) = (val[args[1]],args[2:])
         else:
-          print('*** Unknown sub-command "%s"' % args[1])
-          return
+          if not silent:
+            print('*** Unknown sub-command "%s"' % args[1])
+          return (None, None)
       else:
         (func,args) = (val,args[1:])
     else:
-      print('*** Unknown command "%s"' % args[0])
-      return
+      if not silent:
+        print('*** Unknown command "%s"' % args[0])
+      return (None,None)
 
-    # check for matching args/kwargs and print error+signature if failed
-    try:
-      self.check_args(func,args,kwargs,getattr(func,'_arbargs',False))
-      result = func(*args,**kwargs)
-    except ArgsError as e:
-      print('*** ArgsError: %s' % e.args[0])
-      print('    %s' % e.sig)
-      return
+    return (func,args)
 
-    # print generic exceptions and log them in last_trace for later
-    except:
-      s = traceback.format_exc()
-      self.last_trace = s.strip()
-      print('*** '+s.split('\n')[-2])
-      return
-
-    # print anything returned by the function
-    if result:
-      print(result)
+  # do nothing because we print "Unknown command" elsewhere
+  # @param line (str) raw command text
+  def default(self,line):
+    return
 
   # add an extra newline after command output so the interface looks better
   # @param stop (bool)
@@ -561,6 +610,14 @@ class CLI(cmd.Cmd):
 
     self.plug(c)
     self.modified = True
+
+  def do_roll(self,args):
+    """roll some dice"""
+
+    try:
+      print(Dice(' '.join(args)).roll())
+    except ValueError:
+      print('*** invalid Dice string "%s"' % ' '.join(args))
 
 ###############################################################################
 # Dev commands

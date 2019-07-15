@@ -96,9 +96,10 @@
 # [TODO] ability to rename things
 # [TODO] tutorial help text
 
-import os,re,time,inspect,importlib
-from collections import OrderedDict
+import os,re,time,inspect
 from functools import reduce
+from collections import OrderedDict
+from importlib import util as imp_util
 
 from dnd.dice import Dice
 from dnd.duration import Duration
@@ -162,8 +163,8 @@ class Character(object):
         continue
       name = fname.split('.')[0]
       loc = os.path.join(path,fname)
-      spec = importlib.util.spec_from_file_location(name,loc)
-      mod = importlib.util.module_from_spec(spec)
+      spec = imp_util.spec_from_file_location(name,loc)
+      mod = imp_util.module_from_spec(spec)
       spec.loader.exec_module(mod)
       for (name,cls) in inspect.getmembers(mod,inspect.isclass):
         if issubclass(cls,Character):
@@ -805,7 +806,7 @@ class Character(object):
 
     effect = self.effects[name]
     bonuses = bonuses or effect.bonuses
-    duration = duration or effect.rounds
+    duration = Duration(duration or effect.duration)
     try:
       effect.unplug()
       del self.effects[name]

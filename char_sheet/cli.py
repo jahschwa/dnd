@@ -414,7 +414,7 @@ class CLI(cmd.Cmd):
   #   #2 (list) keyword argument names
   def get_sig(self,func):
 
-    (args,varargs,keywords,defaults) = inspect.getargspec(func)
+    (args,varargs,keywords,defaults,_,_,_) = inspect.getfullargspec(func)
     args.remove('self')
     split = -len(defaults) if defaults else 0
     kwargs = args[split:] if split else []

@@ -552,7 +552,7 @@ class Pathfinder(Character):
     prog = self._input(
         'Enter XP progression (s/M/f)',
         valid = lambda x: x[0] in [x[0] for x in self.XP]
-    )
+    ) or 'medium'
     prog = [k for k in self.XP if k.startswith(prog)][0]
     self.set_text('xp_prog',prog)
 

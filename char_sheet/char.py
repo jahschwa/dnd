@@ -178,20 +178,24 @@ class Character(object):
   # create a new character
   # @param name (None,str) [None] name of the class (defaults to Character)
   # @param args (list) passed to the Character
+  # @param logger (logging.Logger) logger to use
   # @param kwargs (dict) passed to the Character
   # @return (Character)
   @staticmethod
-  def new(name=None,*args,**kwargs):
+  def new(name=None, *args, logger=None, **kwargs):
 
     name = name or 'character'
     (chars,_) = Character._get_systems(lower=True)
-    return chars[name.lower()](*args,**kwargs)
+    char = chars[name.lower()](*args, logger=logger, **kwargs)
+    char.info('NEW ' + char.__class__.__name__)
+    return char
 
   # load a character from file
   # @param name (str) file path
+  # @param logger (logging.Logger) logger to use
   # @return (Character)
   @staticmethod
-  def load(name):
+  def load(name, logger=None):
 
     with open(name,'r') as f:
       lines = [x.strip('\n') for x in f.readlines()]
@@ -208,7 +212,8 @@ class Character(object):
           errors.append('line %.4d | unknown character system "%s"'
               % (i+1,line))
           break
-        char = chars[line](setup=False)
+        char = chars[line](setup=False, logger=logger)
+        char.info('LOAD ' + char.__class__.__name__)
       else:
         line = line.split('\t')
         if line[0] not in fields:
@@ -225,14 +230,21 @@ class Character(object):
     # add any new stats added since the character was saved
     if not errors:
       char._setup(ignore_dupes=True)
+      char.info('LOADED ' + char.text.get('name', 'None').text)
+    else:
+      self.error('ERROR LOADING %s' % name)
 
+    for error in errors:
+      self.error(error)
     return (char,errors)
 
   # @param setup (bool) [True] pre-populate character
   # @param name (str) [None] character name (set to 'UNNAMED' if setup=True)
-  def __init__(self,setup=True,name=None):
+  def __init__(self, setup=True, name=None, logger=None):
 
     self.name = name
+    self.logger = logger
+
     self.stat = OrderedDict(); self.stats = self.stat
     self.bonus = OrderedDict(); self.bonuses = self.bonus
     self.effect = OrderedDict(); self.effects = self.effect
@@ -353,6 +365,17 @@ class Character(object):
 
     with open(name,'w') as f:
       f.write(s)
+
+  # log things
+  def info(self, s):
+    self._log('info', s)
+  def error(self, s):
+    self._log('error', s)
+  def debug(self, s):
+    self._log('debug', s)
+  def _log(self, lvl, s):
+    if self.logger:
+      getattr(self.logger, lvl)(s)
 
 ###############################################################################
 # User input functions

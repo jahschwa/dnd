@@ -85,6 +85,8 @@
 # [TODO] review load/save logic and kill "old" methods
 
 import sys,os,pickle,cmd,inspect,traceback
+import logging
+from argparse import ArgumentParser
 
 import environ
 import dnd.char_sheet.char as char
@@ -97,10 +99,11 @@ from dnd.dice import Dice
 #   - if we get a KeyboardInterrupt or EOFError resume the loop
 ###############################################################################
 
-# @param fname (None,str) [None] the file to open
-def main(fname=None):
+def main(args=None):
 
-  cli = CLI(fname)
+  args = get_args(args or [])
+
+  cli = CLI(**args)
   run = True
   print('')
   while run:
@@ -110,6 +113,25 @@ def main(fname=None):
     except (KeyboardInterrupt,EOFError):
       print('\n*** Use Ctrl+D / EOF at the main prompt to exit')
       pass
+
+# @param args (list) list of arguments to parse
+def get_args(args):
+
+  if isinstance(args, dict):
+    return args
+
+  ap = ArgumentParser()
+  add = ap.add_argument
+
+  add('file_name', nargs='?',
+    help='Character file to edit')
+
+  add('-l', '--log-file',
+    help='File to use for logging')
+  add('-d', '--debug', action='store_true',
+    help='Enable debug logging (requires -l)')
+
+  return vars(ap.parse_args(args))
 
 ###############################################################################
 # exceptions and connectors
@@ -151,21 +173,33 @@ class CLI(cmd.Cmd):
 # CLI overrides
 ###############################################################################
 
-  # @param fname (None,str) file name to load if not None
-  def __init__(self,fname):
+  # @param file_name (str) [None] file name to load
+  # @param log_file (str) [None] file to use for logging
+  # @param debug (bool) [False] enable debug logging
+  def __init__(self, file_name=None, log_file=None, debug=False):
 
     cmd.Cmd.__init__(self)
     self.prompt = Prompt(self.get_prompt)
     self.doc_header = 'General commands:'
     self.misc_header = 'Explanations:'
 
-    self.fname = fname
+    self.fname = file_name
+    self.log_file = log_file
     self.char = None
     self.exported = {}
     self.modified = False
     self.last_trace = 'No logged traceback'
-    if fname:
-      self.do_load([fname])
+
+    self.logger = None
+    if self.log_file:
+      logging.basicConfig(filename=self.log_file,
+        format='%(asctime).19s | %(levelname).3s | %(message)s',
+        level=(logging.DEBUG if debug else logging.INFO)
+      )
+      self.logger = logging.getLogger()
+
+    if self.fname:
+      self.do_load([self.fname])
 
     self.debug = {
         'args' : False
@@ -568,7 +602,7 @@ class CLI(cmd.Cmd):
     elif not os.path.isfile(args[0]):
       print('Unable to read "%s"' % args[0])
     else:
-      (c,errors) = char.Character.load(args[0])
+      (c, errors) = char.Character.load(args[0], logger=self.logger)
 
       # print semi-detailed errors to help with debugging
       if errors:
@@ -602,7 +636,7 @@ class CLI(cmd.Cmd):
     args = 'Pathfinder' if not args else args[0]
 
     try:
-      c = char.Character.new(args)
+      c = char.Character.new(args, logger=self.logger)
     except KeyError:
       print('Unknown Character type "%s"; known types:' % args)
       print('  '+'\n  '.join(sorted(char.Character.get_systems())))
@@ -699,11 +733,4 @@ class CLI(cmd.Cmd):
 
 if __name__=='__main__':
 
-  args = sys.argv
-  fname = None
-  if len(args)>1:
-    if os.path.isfile(args[1]):
-      fname = args[1]
-    else:
-      print('Unable to open "%s"' % args[1])
-  main(fname)
+  main(sys.argv[1:])

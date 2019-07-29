@@ -158,6 +158,11 @@ class Stat(Field):
     if not self.char:
       raise RuntimeError('plug() must be called before calc()')
 
+    (b, c) = self.get_bonuses()
+    b = ','.join(sorted([x[1].name for x in b])) or 'none'
+    c = ','.join(sorted([x[1].name for x in c])) or 'none'
+    self.char.debug('CALC %s = [%s] + (%s) ? (%s)' % (self.name, self.original, b, c))
+
     # evaluate our formula without bonuses
     old_v = self.value
     old_n = self.normal
@@ -173,6 +178,8 @@ class Stat(Field):
         self.value += sum(bonuses)
       else:
         self.value += max(bonuses)
+
+    self.char.debug('CALC %s = %s + bonuses = %s' % (self.name, self.normal, self.value))
 
     # if we changed, bubble the calc() up through our dependants
     if old_v!=self.value or old_n!=self.normal:

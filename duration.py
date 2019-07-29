@@ -9,6 +9,8 @@ class Duration(object):
 
   INF = -1
   INF_NAMES = (None,'inf','infinity','infinite','perm','permanent','forever')
+  EXP = 0
+  EXP_NAMES = ('exp','expire','expired','inactive','off')
 
   UNITS = {
       ('','r','rd','rds','rnd','rnds','round','rounds') : 1,
@@ -68,6 +70,8 @@ class Duration(object):
       s = s.lower().replace(' ','').replace('_','')
     if s in Duration.INF_NAMES:
       return str(Duration.INF)
+    if s in Duration.EXP_NAMES:
+      return str(Duration.EXP)
 
     durs = s.split('+')
 

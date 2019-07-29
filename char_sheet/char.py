@@ -912,14 +912,15 @@ class Character(object):
       raise KeyError('unknwown bonus "%s"' % name)
 
   # @raise KeyError if name does not exist
-  def off(self,name):
+  def off(self, name, force=False):
     """
     deactivate a Bonus
       - name (string)
+      - force (bool) turn off even if part of an Effect
     """
 
     try:
-      self.bonuses[name].off()
+      self.bonuses[name].off(force=force)
     except KeyError:
       raise KeyError('unknwown bonus "%s"' % name)
 

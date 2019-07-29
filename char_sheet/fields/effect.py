@@ -66,7 +66,9 @@ class Effect(Field):
 
     if force or self.duration!=self.last:
       for name in self.bonuses:
-        self.char.bonuses[name].toggle(self.is_active())
+        bonus = self.char.bonuses[name]
+        if not bonus.condition:
+          bonus.toggle(self.is_active())
 
   # advance our duration
   # @param dur (Duration,int,str) [1] the duration to advance forward

@@ -270,7 +270,10 @@ class Stat(Field):
     stats = 'b:%s/%s ?:%s/%s' % (active_b,total_b,active_c,total_c)
     bons = ''
     if cond_bonuses:
-      bons = ''.join(['\n  %s'%b[1]._str(stat=False) for b in conds])
+      bons = ''.join(['\n  %s'%b[1]._str(stat=False)
+        for b in conds
+        if not b[1].usedby or any(self.char.effect[e].is_active() for e in b[1].usedby)
+      ])
     return '%s %3s %s (%s)%s' % (flags,self.value,self.name,stats,bons)
 
   # don't print conditional bonuses
@@ -299,8 +302,9 @@ class Stat(Field):
     l.extend(sorted(x))
     x = []
     for (stat,bonus) in conds:
-      name = '' if stat==self.name else '<%s> ' % stat
-      x +=  [' bonus? | %s%s' % (name,bonus._str(stat=False))]
+      if not bonus.usedby or any(self.char.effect[e].is_active() for e in bonus.usedby):
+        name = '' if stat==self.name else '<%s> ' % stat
+        x +=  [' bonus? | %s%s' % (name,bonus._str(stat=False))]
     l.extend(sorted(x))
 
     l.append(' normal | %s' % self.normal)

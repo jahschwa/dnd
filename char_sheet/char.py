@@ -232,10 +232,10 @@ class Character(object):
       char._setup(ignore_dupes=True)
       char.info('LOADED ' + char.text.get('name', 'None').text)
     else:
-      self.error('ERROR LOADING %s' % name)
+      char.error('ERROR LOADING %s' % name)
 
     for error in errors:
-      self.error(error)
+      char.error(error)
     return (char,errors)
 
   # @param setup (bool) [True] pre-populate character

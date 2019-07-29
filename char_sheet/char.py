@@ -50,7 +50,7 @@
 
 # >>> all stat ac
 #   value | 14
-# formula | 10+$_ac_armor+$_ac_shield+$_ac_dex+$size+$_ac_nat+$_ac_deflect+$_ac_misc
+# formula | 10+$_ac_armor+$_ac_shield+$_ac_dex-$size+$_ac_nat+$_ac_deflect+$_ac_misc
 #   bonus | <_ac_armor> [+] mage_armor +4 (armor)
 #  normal | 10
 #    uses | _ac_armor,_ac_deflect,_ac_dex,_ac_misc,_ac_nat,_ac_shield,size

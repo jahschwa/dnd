@@ -29,7 +29,7 @@ class Pathfinder(Character):
   ('xp',0),('level',1),('hd','$level'),('caster_level','$level'),
 
   ('size',0),('legs',2),
-  ('_size_index','4 if $size not in [8,4,2,1,0,-1,-2,-4,-8] else [8,4,2,1,0,-1,-2,-4,-8].index($size)'),
+  ('_size_index','4 if $size not in [-8,-4,-2,-1,0,1,2,4,8] else [-8,-4,-2,-1,0,1,2,4,8].index($size)'),
 
   ('strength',10),('dexterity',10),('constitution',10),
   ('intelligence',10),('wisdom',10),('charisma',10),
@@ -47,16 +47,16 @@ class Pathfinder(Character):
 
   ('_ac_armor',0),('_ac_shield',0),('_ac_dex','min($dex,$_max_dex)'),
   ('_ac_nat',0),('_ac_deflect',0),('_ac_misc',0),
-  ('ac','10+$_ac_armor+$_ac_shield+$_ac_dex+$size+$_ac_nat+$_ac_deflect+$_ac_misc'),
-  ('ac_touch','10+$_ac_dex+$size+$_ac_deflect+$_ac_misc'),
-  ('ac_ff','10+$_ac_armor+$_ac_shield+$size+$_ac_nat+$_ac_deflect+$_ac_misc'),
+  ('ac','10+$_ac_armor+$_ac_shield+$_ac_dex-$size+$_ac_nat+$_ac_deflect+$_ac_misc'),
+  ('ac_touch','10+$_ac_dex-$size+$_ac_deflect+$_ac_misc'),
+  ('ac_ff','10+$_ac_armor+$_ac_shield-$size+$_ac_nat+$_ac_deflect+$_ac_misc'),
 
   ('fortitude','$con'),('reflex','$dex'),('will','$wis'),
 
-  ('bab',0),('sr',0),('melee','$bab+$size+$str'),('ranged','$bab+$size+$dex'),
+  ('bab',0),('sr',0),('melee','$bab-$size+$str'),('ranged','$bab-$size+$dex'),
 
-  ('cmb','$melee-2*$size'),
-  ('cmd','10+$bab+$str+$_ac_dex+$_ac_deflect+$_ac_misc-$size'),
+  ('cmb','$melee+2*$size'),
+  ('cmd','10+$bab+$str+$_ac_dex+$_ac_deflect+$_ac_misc+$size'),
 
   ('acp','0'),
 
@@ -256,7 +256,7 @@ class Pathfinder(Character):
     super(Pathfinder,self)._setup(ignore_dupes)
     for (name,formula) in self.SKILLS.items():
       if name in self.SKILLS_TINY_DEX:
-        formula = '($str if $size<2 else $dex)'
+        formula = '($str if $size>-2 else $dex)'
       skill = PathfinderSkill(name,formula)
       try:
         self._add_stat(skill)

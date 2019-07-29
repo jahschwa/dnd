@@ -274,6 +274,7 @@ class Character(object):
       'all',
       'advance',
       'reset',
+      'expire',
       'roll',
     ]
 
@@ -293,6 +294,7 @@ class Character(object):
       'd' : 'del',
       '++': 'advance',
       'r' : 'reset',
+      'x' : 'expire',
       'c' : 'create',
       '!' : 'roll',
     }
@@ -909,7 +911,7 @@ class Character(object):
     try:
       self.bonuses[name].on()
     except KeyError:
-      raise KeyError('unknwown bonus "%s"' % name)
+      raise KeyError('unknown bonus "%s"' % name)
 
   # @raise KeyError if name does not exist
   def off(self, name, force=False):
@@ -922,7 +924,7 @@ class Character(object):
     try:
       self.bonuses[name].off(force=force)
     except KeyError:
-      raise KeyError('unknwown bonus "%s"' % name)
+      raise KeyError('unknown bonus "%s"' % name)
 
   # @raise KeyError if name does not exist
   def revert(self,name):
@@ -936,7 +938,7 @@ class Character(object):
     elif name in self.effects:
       self.effects[name].revert()
     else:
-      raise KeyError('unknwown bonus/effect "%s"' % name)
+      raise KeyError('unknown bonus/effect "%s"' % name)
 
   # @raise KeyError if name does not exist
   def reset(self,names):
@@ -951,6 +953,22 @@ class Character(object):
     try:
       for name in names:
         self.effects[name].reset()
+    except KeyError:
+      raise KeyError('unknown effect "%s"' % name)
+
+  # @raise KeyError if name does not exist
+  def expire(self, names):
+    """
+    exhaust the duration of (and deactivate) effect(s)
+      - name (string,list) effect(s) to expire
+    """
+
+    if not isinstance(names, list):
+      names = [names]
+
+    try:
+      for name in names:
+        self.effects[name].expire()
     except KeyError:
       raise KeyError('unknown effect "%s"' % name)
 

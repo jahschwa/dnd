@@ -97,7 +97,7 @@ class Effect(Field):
     self.calc()
 
   # expire our duration
-  def make_expired(self):
+  def expire(self):
 
     self.last = self.duration.copy()
     self.duration.expire()

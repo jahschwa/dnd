@@ -740,10 +740,22 @@ class Pathfinder(Character):
 
 class PathfinderSkill(Stat):
 
-  FIELDS = OrderedDict(
-      [(k,v) for (k,v) in Stat.FIELDS.items()] +
-      [('ranks',int),('class_skill',bool)]
-  )
+  FIELDS = Stat.FIELDS.copy()
+  FIELDS.update([
+    ('ranks', int),
+    ('class_skill', bool),
+  ])
+
+  # needed for Stat.copy()
+  COPY_KWARGS = Stat.COPY_KWARGS.copy()
+  COPY_KWARGS.append([
+    'ranks',
+    ('clas', 'class_skill'),
+  ])
+  COPY_VARS = Stat.COPY_VARS.copy()
+  COPY_VARS.append([
+    'trained_only'
+  ])
 
   # the first 6 args get passed to Stat
   # @param ranks (int) [0] skill ranks
@@ -774,9 +786,6 @@ class PathfinderSkill(Stat):
       self.set_formula(self.formula+f)
 
     self.trained_only = False
-
-    # needed for Stat.copy()
-    self.COPY += ['ranks','class_skill']
 
   # @param new (bool) [True]
   def set_cskill(self,new=True):

@@ -43,7 +43,7 @@ class Effect(Field):
   def plug(self,char):
 
     for name in self.bonuses:
-      char.bonuses[name].usedby.add(self.name)
+      char.bonuses[name].effects.add(self.name)
 
     self.char = char
     self.calc(force=True)
@@ -56,7 +56,7 @@ class Effect(Field):
 
     for name in self.bonuses:
       bonus = self.char.bonuses[name]
-      bonus.usedby.remove(self.name)
+      bonus.effects.remove(self.name)
       bonus.off()
     self.char = None
 

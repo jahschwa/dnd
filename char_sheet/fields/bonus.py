@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-from dnd.char_sheet.fields.field import Field
+from dnd.char_sheet.fields.stat import Stat
 
 ###############################################################################
 # Bonus class
@@ -9,37 +9,59 @@ from dnd.char_sheet.fields.field import Field
 #   - they can be conditional
 ###############################################################################
 
-class Bonus(Field):
+class Bonus(Stat):
 
   FIELDS = OrderedDict([
-      ('name',str),
-      ('value',int),
-      ('stats',list),
-      ('typ',str),
-      ('condition',str),
-      ('text',str),
-      ('active',bool)
+    ('name', str),
+    ('original', str),
+    ('stats', list),
+    ('typ', str),
+    ('condition', str),
+    ('text', str),
+    ('active', bool),
+    ('updated', float),
   ])
 
+  COPY_ARGS = [
+    'name',
+    ('formula', 'original'),
+    'stats',
+  ]
+  COPY_KWARGS = [
+    'typ',
+    ('cond', 'condition'),
+    'text',
+    'active',
+    'updated'
+  ]
+  COPY_VARS = [
+    'usedby',
+    'effects'
+  ]
+
   # @param name (str)
-  # @param value (int,Dice) the value to add to our stats
+  # @param formula (str) will get passed to eval()
+  #   using $NAME refers to the value of the Stat by that name
+  #   using #NAME refers to the normal (no bonuses) value
+  #   using @NAME refers to an attribute of this Bonus object
+  #   these can be wrapped in braces to prevent conflicts e.g. ${NAME}
   # @param stats (str,list of str) names of stats that we affect
   # @param typ (str) ['none'] our type e.g. armor, dodge, morale
   # @param cond (str) [''] when this bonus applies if not all the time
   # @param text (str) ['']
   # @param active (bool) [not cond] whether we're "on" and modifying stats
-  def __init__(self,name,value,stats,typ=None,cond=None,text=None,active=True):
+  # @param updated (float) [time.time()] when this Bonus was updated
+  def __init__(self, name, formula, stats,
+      typ=None, cond=None, text=None, active=True, updated=None):
 
-    self.name = name
-    self.value = value
+    super().__init__(name, formula, text=text, updated=updated)
+
     self.stats = stats if isinstance(stats,list) else [stats]
-    self.text = text or ''
-    self.active = False if cond else active
     self.typ = (typ or 'none').lower()
     self.condition = cond or ''
+    self.active = False if cond else active
 
-    self.char = None
-    self.usedby = set() # this will contain Effects
+    self.effects = set()
     self.last = active # remember the state we're in before a toggle
 
   # @param char (Character)
@@ -49,6 +71,8 @@ class Bonus(Field):
     # I'd rather have this in __init__ but we don't have a char at that point
     if char.BONUS_TYPES and self.typ not in char.BONUS_TYPES:
       raise ValueError('invalid bonus type "%s"' % self.typ)
+
+    super().plug(char)
 
     for name in self.stats:
       stat = char.stats[name]
@@ -60,7 +84,7 @@ class Bonus(Field):
     if not self.condition and self.typ in self.char.BONUS_PERM:
       self.active = True
 
-  def unplug(self):
+  def unplug(self, force=False):
 
     if not self.char:
       raise RuntimeError('plug() must be called before unplug()')
@@ -69,13 +93,16 @@ class Bonus(Field):
       stat = self.char.stats[name]
       stat.del_bonus(self)
       stat.calc()
-    self.char = None
+
+    super().unplug(force=force)
 
   # @return (int) the value of this bonus
   def get_value(self):
     return self.value
 
   def calc(self):
+
+    super().calc()
 
     for name in self.stats:
       self.char.stats[name].calc()
@@ -90,7 +117,7 @@ class Bonus(Field):
     if force:
       self.toggle(False)
     else:
-      for e in self.usedby:
+      for e in self.effects:
         if self.char.effects[e].is_active():
           return
       self.toggle(False)
@@ -129,7 +156,7 @@ class Bonus(Field):
       s = ' %s' % ','.join(self.stats)
     act = '-+'[self.active]
     sign = '+' if self.value>=0 else ''
-    eff = '' if not self.usedby else '{%s}'%','.join(sorted(self.usedby))
+    eff = '' if not self.effects else '{%s}'%','.join(sorted(self.effects))
     cond = '' if not self.condition else ' ? %s' % self.condition
     return '[%s]%s%s %s%s%s (%s)%s' % (act,n,eff,sign,self.get_value(),s,self.typ,cond)
 
@@ -141,11 +168,24 @@ class Bonus(Field):
   def str_all(self):
 
     l =     ['  value | %s' % self.get_value()]
+    l.append('formula | %s' % self.original)
+    l.append('   uses | %s' % ','.join(sorted(self.uses)))
     l.append(' active | %s' % self.active)
     l.append('   type | %s' % self.typ)
     l.append(' revert | %s' % ('change','same')[self.last==self.active])
     l.append('  stats | %s' % ','.join(sorted(self.stats)))
-    l.append(' usedby | %s' % ','.join(sorted(self.usedby)))
+    l.append('effects | %s' % ','.join(sorted(self.effects)))
     l.append('conditn | %s' % self.condition)
     l.append('   text | %s' % self.text)
     return '\n'.join(l)
+
+  # @return (str)
+  def str_search(self):
+    return str(self)
+
+  @property
+  def add_bonus(self):
+    raise AttributeError("'Bonus' object has no attribute 'add_bonus'")
+  @property
+  def del_bonus(self):
+    raise AttributeError("'Bonus' object has no attribute 'del_bonus'")

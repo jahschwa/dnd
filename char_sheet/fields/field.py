@@ -21,6 +21,7 @@
 # [TODO] Spell
 # [TODO] Event
 
+import inspect
 import time
 from collections import OrderedDict
 from functools import reduce
@@ -48,21 +49,29 @@ class Field(object):
   # @param fields (list of str) arguments to pass to the object __init__
   # @return (object) an instance a Field sub-class
   @classmethod
-  def load(cls,fields):
+  def load(cls, fields):
 
-    parsed = []
+    sig = inspect.getfullargspec(cls.__init__)
+    required = len(sig.args) - 1 - len(sig.defaults or [])
+    if len(fields) < required:
+      raise ValueError('need %s args for %s but got %s' % (required, cls.__name__, len(fields)))
+
     i = 0
+    parsed = []
     for typ in cls.FIELDS.values():
-      val = None
+      result = None
       if typ is not None:
+        val = fields[i]
         if typ is list:
-          val = fields[i].split(',')
+          result = val.split(',')
         elif typ is bool:
-          val = fields[i]=='True'
+          result = val=='True'
         else:
-          val = typ(fields[i])
+          result = typ(val)
         i += 1
-      parsed.append(val)
+      parsed.append(result)
+      if i >= len(fields):
+        break
     return cls(*parsed)
 
   # calls str() on each field (or on each item if the field is a list)

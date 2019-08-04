@@ -75,7 +75,6 @@
 # ===== high-level / large-scale =====
 # [TODO] consider another way for set_stat() to interact with plug/unplug?
 # [TODO] decide what goes in here and what goes in the CLI
-# [TODO] Bonus subclasses Stat but only allows root nodes? allows formulas
 # [TODO] stat classes for setting (and getting?) e.g. abilities, skills
 # [TODO] common effect library for importing: feats, spells, conditions
 # [TODO] consolidate / move to fields.py add/set/del commands
@@ -97,6 +96,7 @@
 # [TODO] tutorial help text
 
 import os,re,time,inspect
+import traceback
 from functools import reduce
 from collections import OrderedDict
 from importlib import util as imp_util
@@ -159,7 +159,7 @@ class Character(object):
     systems = {'%sharacter'%('Cc'[lower]) : Character}
     fields = {}
     for fname in os.listdir(path):
-      if fname.startswith('_'):
+      if fname.startswith('_') or fname.startswith('.') or not fname.endswith('py'):
         continue
       name = fname.split('.')[0]
       loc = os.path.join(path,fname)
@@ -198,34 +198,41 @@ class Character(object):
   def load(name, logger=None):
 
     with open(name,'r') as f:
-      lines = [x.strip('\n') for x in f.readlines()]
+      lines = [x.strip(' \n') for x in f.readlines()]
 
     errors = []
     (chars,fields) = Character._get_systems()
 
     char = None
     for (i,line) in enumerate(lines):
-      if not line:
+      if not line or line.startswith('#'):
         continue
       if not char:
         if line not in chars:
-          errors.append('line %.4d | unknown character system "%s"'
-              % (i+1,line))
+          s = 'line %.4d | unknown character system "%s"' % (i+1,line)
+          errors.append(s)
+          char.error(s)
           break
         char = chars[line](setup=False, logger=logger)
         char.info('LOAD ' + char.__class__.__name__)
       else:
         line = line.split('\t')
         if line[0] not in fields:
-          errors.append('line %.4d | unknown object type "%s"' % (i+1,line[0]))
+          s = 'line %.4d | unknown object type "%s"' % (i+1,line[0])
+          errors.append(s)
+          char.error(s)
           continue
         try:
           obj = fields[line[0]].load(line[1:])
           if not errors:
             char._get_add_method(obj.__class__)(obj)
         except Exception as e:
-          errors.append('line %.4d |   %s' % (i+1,' / '.join(line)))
-          errors.append('*** %s: %s' % (e.__class__.__name__,e.args[0]))
+          lines = ['line %.4d |   %s' % (i+1,' / '.join(line))]
+          lines.append('*** %s: %s' % (e.__class__.__name__,e.args[0]))
+          for s in lines:
+            errors.append(s)
+            char.error(s)
+          char.debug(traceback.format_exc())
 
     # add any new stats added since the character was saved
     if not errors:
@@ -234,8 +241,6 @@ class Character(object):
     else:
       char.error('ERROR LOADING %s' % name)
 
-    for error in errors:
-      char.error(error)
     return (char,errors)
 
   # @param setup (bool) [True] pre-populate character
@@ -674,7 +679,8 @@ class Character(object):
     self.stats[stat.name] = stat
 
   # @raise DuplicateError if name already exists
-  def add_stat(self,name,formula='0',text='',updated=None):
+  # @raise FormulaError if formula contains errors
+  def add_stat(self, name, formula='0', text='', updated=None):
     """
     add a new Stat
       - name (string)
@@ -706,13 +712,11 @@ class Character(object):
 
   # @raise KeyError if name does not exist
   # @raise FormulaError if formula contains errors
-  def set_stat(self,name,formula=None,text=None,updated=None,force=False):
+  @arbargs
+  def set_stat(self, name, **kwargs):
     """
     modify an existing Stat
-      - name (string)
-      - formula (string) see 'help add stat'
-      - [text = None] (string)
-      - [updated = None] (int)
+      - see "help add stat"
       - [force = False] (bool) ignore protected stats and force the update
     """
 
@@ -721,6 +725,7 @@ class Character(object):
     except KeyError:
       raise KeyError('unknown stat "%s"' % name)
 
+    force = kwargs.pop('force', False)
     if not force:
       if old.protected:
         raise ProtectedError('stat "%s" is protected (use force)' % name)
@@ -728,16 +733,13 @@ class Character(object):
         raise ProtectedError('stat "%s" is not a root (use force)' % name)
 
     # to preserve atomicity, copy the existing stat, modify it, then replug
-    new = old.copy(text=text,formula=formula,updated=updated)
-    new.usedby = set(old.usedby)
-    if new.usedby:
-      new.root = False
+    new = old.copy(**kwargs)
     old.unplug(force=True)
+
     try:
       self.stats[name] = new
       new.plug(self)
     except FormulaError:
-      old.formula = old.original
       old.plug(self)
       self.stats[name] = old
       raise
@@ -752,36 +754,49 @@ class Character(object):
     self.bonuses[bonus.name] = bonus
 
   # @raise DuplicateError if name already exists
-  def add_bonus(self,name,value,stats,typ=None,cond=None,text=None,active=True):
+  # @raise FormulaError if formula contains errors
+  def add_bonus(self, name, formula, stats,
+      typ=None, cond=None, text=None, active=True, updated=None):
     """
     add a new Bonus
       - name (string)
-      - value (int,Dice) the number/Dice to add to our stat(s)
+      - formula (string) the formula for calculating its value
+        - see "help add stat"
       - stats (string,list) the stat(s) this Bonus modifies
       - [typ = 'none'] (string) the bonus type (e.g. 'armor')
       - [cond = ''] (string) when this bonus applies if not all the time
       - [text = ''] (string)
       - [active = True] (bool)
+      - [updated = NOW] (int) time the Bonus was last updated (unix epoch)
     """
 
-    bonus = Bonus(name,Dice(value),stats,typ,cond,text,active)
+    bonus = Bonus(name, formula, stats, typ, cond, text, active, updated)
     self._add_bonus(bonus)
 
   # @raise KeyError if name does not exist
-  def set_bonus(self,name,value):
+  # @raise FormulaError if formula contains errors
+  @arbargs
+  def set_bonus(self, name, **kwargs):
     """
     modify an existing Bonus
-      - name (string)
-      - value (int,Dice) the number/Dice to add to our stat(s)
+      - see "help add bonus" for details
     """
 
     try:
-      bonus = self.bonuses[name]
+      old = self.bonuses[name]
     except KeyError:
       raise KeyError('unknown bonus "%s"' % name)
 
-    bonus.value = Dice(value)
-    bonus.calc()
+    # to preserve atomicity, copy the existing Bonus, modify it, then replug
+    new = old.copy(**kwargs)
+    old.unplug(force=True)
+
+    try:
+      new.plug(self)
+    except FormulaError:
+      old.plug(self)
+      raise
+    self.bonuses[name] = new
 
   # @raise KeyError if name does not exist
   def del_bonus(self,name):

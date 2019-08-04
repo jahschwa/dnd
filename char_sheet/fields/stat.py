@@ -19,16 +19,29 @@ from dnd.char_sheet.fields import Field
 class Stat(Field):
 
   FIELDS = OrderedDict([
-      ('name',str),
-      ('original',str),
-      ('text',str),
-      ('bonuses',None),
-      ('protected',bool),
-      ('updated',float)
+    ('name',str),
+    ('original',str),
+    ('text',str),
+    ('bonuses',None),
+    ('protected',bool),
+    ('updated',float)
   ])
 
+  COPY_ARGS = [
+    'name'
+  ]
+  COPY_KWARGS = [
+    ('formula', 'original'),
+    'text',
+    'bonuses',
+    'updated'
+  ]
+  COPY_VARS = [
+    'usedby'
+  ]
+
   VARS = {'$':'self.char.stats["%s"].value',
-      '#':'self.char.stats["%s"].normal',
+    '#':'self.char.stats["%s"].normal',
   }
 
   # @param name (str)
@@ -184,7 +197,10 @@ class Stat(Field):
     # if we changed, bubble the calc() up through our dependants
     if old_v!=self.value or old_n!=self.normal:
       for stat in self.usedby:
-        stat = self.char.stats[stat]
+        try:
+          stat = self.char.stats[stat]
+        except KeyError:
+          stat = self.char.bonuses[stat]
         stat.calc()
 
   # add a bonus to this stat that will affect its value
@@ -233,20 +249,28 @@ class Stat(Field):
   # copy this Stat into a new object with specified changes
   # @param kwargs (dict) fields to update
   # @return (Stat) the copy
-  def copy(self,**kwargs):
+  def copy(self, **kwargs):
 
     a = []
-    for var in ('name','text','bonuses','updated'):
-      a.append(kwargs.get(var,getattr(self,var)))
-    formula = kwargs.get('formula',self.original)
-    a.insert(1,formula)
+    for var in self.COPY_ARGS:
+      if not isinstance(var, tuple):
+        var = (var, var)
+      (kwarg_name, prop_name) = var
+      a.append(kwargs.get(kwarg_name, getattr(self, prop_name)))
 
-    # sub-classes of Stat can specify additional fields to copy
     k = {}
-    for var in self.COPY:
-      k[var] = kwargs.get(var,getattr(self,var))
+    for var in self.COPY_KWARGS:
+      if not isinstance(var, tuple):
+        var = (var, var)
+      (kwarg_name, prop_name) = var
+      k[kwarg_name] = kwargs.get(kwarg_name, getattr(self, prop_name))
 
-    return self.__class__(*a,**k)
+    new = self.__class__(*a, **k)
+
+    for var in self.COPY_VARS:
+      setattr(new, var, getattr(self, var).copy())
+
+    return new
 
   # looks like: -rl
   #   - (type) should be overridden in child classes

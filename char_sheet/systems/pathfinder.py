@@ -97,6 +97,7 @@ class Pathfinder(Character):
       'linguisitics','profession','sleight_of_hand','spellcraft',
       'use_magic_device']
   SKILLS_TINY_DEX = ['climb', 'swim']
+  SKILLS_SIZE = ['stealth']
 
   TEXTS = Character.TEXTS.copy()
   TEXTS.update({'race':'','class':'','race_traits':'','xp_prog':'medium'})
@@ -251,13 +252,15 @@ class Pathfinder(Character):
 
   # include skills in the setup method
   # see Character._setup()
-  def _setup(self,ignore_dupes=False):
+  def _setup(self, ignore_dupes=False):
 
-    super(Pathfinder,self)._setup(ignore_dupes)
-    for (name,formula) in self.SKILLS.items():
+    super()._setup(ignore_dupes)
+    for (name, formula) in self.SKILLS.items():
       if name in self.SKILLS_TINY_DEX:
         formula = '($str if $size>-2 else $dex)'
-      skill = PathfinderSkill(name,formula)
+      elif name in self.SKILLS_SIZE:
+        formula = '4*(4-$_size_index)'
+      skill = PathfinderSkill(name, formula)
       try:
         self._add_stat(skill)
       except DuplicateError:

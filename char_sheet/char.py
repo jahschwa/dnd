@@ -179,23 +179,29 @@ class Character(object):
   # @param name (None,str) [None] name of the class (defaults to Character)
   # @param args (list) passed to the Character
   # @param logger (logging.Logger) logger to use
+  # @param input_func (func) used to format input prompts and return result
+  # @param output_func (func) used to format output
   # @param kwargs (dict) passed to the Character
   # @return (Character)
   @staticmethod
-  def new(name=None, *args, logger=None, **kwargs):
+  def new(name=None, *args, logger=None, input_func=None, output_func=None,
+      **kwargs):
 
     name = name or 'character'
     (chars,_) = Character._get_systems(lower=True)
-    char = chars[name.lower()](*args, logger=logger, **kwargs)
+    char = chars[name.lower()](*args, logger=logger,
+        input_func=input_func, output_func=output_func, **kwargs)
     char.info('NEW ' + char.__class__.__name__)
     return char
 
   # load a character from file
   # @param name (str) file path
   # @param logger (logging.Logger) logger to use
+  # @param input_func (func) used to format input prompts and return result
+  # @param output_func (func) used to format output
   # @return (Character)
   @staticmethod
-  def load(name, logger=None):
+  def load(name, logger=None, input_func=None, output_func=None):
 
     with open(name,'r') as f:
       lines = [x.strip(' \n') for x in f.readlines()]
@@ -213,7 +219,8 @@ class Character(object):
           errors.append(s)
           char.error(s)
           break
-        char = chars[line](setup=False, logger=logger)
+        char = chars[line](setup=False, logger=logger,
+            input_func=input_func, output_func=output_func)
         char.info('LOAD ' + char.__class__.__name__)
       else:
         line = line.split('\t')
@@ -245,10 +252,16 @@ class Character(object):
 
   # @param setup (bool) [True] pre-populate character
   # @param name (str) [None] character name (set to 'UNNAMED' if setup=True)
-  def __init__(self, setup=True, name=None, logger=None):
+  # @param logger (logging.Logger) [None] logger to use
+  # @param input_func (func) [input] input function to format input prompts
+  # @param output_func (func) [print] output function to format and print
+  def __init__(self, setup=True, name=None, logger=None,
+      input_func=None, output_func=None):
 
     self.name = name
     self.logger = logger
+    self.input = input_func or input
+    self.output = output_func or print
 
     self.stat = OrderedDict(); self.stats = self.stat
     self.bonus = OrderedDict(); self.bonuses = self.bonus
@@ -409,7 +422,7 @@ class Character(object):
     while count==0 or repeat:
       count += 1
 
-      s = input(msg+': ').strip()
+      s = self.input(msg)
       if lower:
         s = s.lower()
 
@@ -426,7 +439,7 @@ class Character(object):
         try:
           s = parse(s)
         except ValueError as e:
-          print('*** %s: %s' % (e.__class__.__name__,e.args[0]))
+          self.output('*** %s: %s' % (e.__class__.__name__,e.args[0]))
           if repeat:
             continue
           else:
@@ -435,7 +448,7 @@ class Character(object):
       if valid is None or valid(s):
         break
       else:
-        print('*** Invalid entry')
+        self.output('*** Invalid entry')
 
     return s
 
@@ -530,7 +543,7 @@ class Character(object):
         s += 'KeyError'
       except AttributeError:
         s += str(Dice('d20').roll()+stat.value)
-      print(s)
+      self.output(s)
 
   @arbargs
   def search(self,name='.*',fields=None,exclude='_',ignore_case=True,
@@ -667,7 +680,7 @@ class Character(object):
       except KeyError:
         raise KeyError('unknown effect "%s"' % name)
       if effect.is_active() and effect.advance(duration):
-        print('!!! Effect expired: %s (%s)' % (name,','.join(effect.bonuses)))
+        self.output('!!! Effect expired: %s (%s)' % (name,','.join(effect.bonuses)))
 
   # @param stat (Stat) the Stat to add
   # @raise DuplicateError if the name already exists
@@ -1019,7 +1032,7 @@ class Character(object):
 
     bonuses = []
 
-    print('\nType "skip" at any prompt to finish entering bonuses\n')
+    self.output('\nType "skip" at any prompt to finish entering bonuses\n')
     try:
       while True:
 
@@ -1049,16 +1062,16 @@ class Character(object):
         ) or None
 
         bonuses.append(Bonus(b_name,b_value,b_stats,b_typ))
-        print('')
+        self.output('')
 
     except UserSkipException:
-      print('\r')
+      self.output('')
 
     for bonus in bonuses:
       self._add_bonus(bonus)
     
     self.add_effect(name,[b.name for b in bonuses],duration,text)
-    print(self.effects[name])
+    self.output(self.effects[name])
   
   def create_text(self):
     raise NotImplementedError

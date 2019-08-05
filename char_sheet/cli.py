@@ -111,7 +111,9 @@ def main(args=None):
       cli.cmdloop()
       run = False
     except (KeyboardInterrupt,EOFError):
-      print('\n*** Use Ctrl+D / EOF at the main prompt to exit')
+      print('\n')
+      cli.output('*** Use Ctrl+D / EOF at the main prompt to exit')
+      print('')
       pass
 
 # @param args (list) list of arguments to parse
@@ -180,6 +182,7 @@ class CLI(cmd.Cmd):
 
     cmd.Cmd.__init__(self)
     self.prompt = Prompt(self.get_prompt)
+    self.indent = '  | '
     self.doc_header = 'General commands:'
     self.misc_header = 'Explanations:'
 
@@ -237,8 +240,8 @@ class CLI(cmd.Cmd):
 
     (args,kwargs) = self.get_args(line)
     if self.debug['args']:
-      print(args)
-      print(kwargs)
+      self.output(args)
+      self.output(kwargs)
       print('')
 
     return (args,kwargs)
@@ -253,18 +256,19 @@ class CLI(cmd.Cmd):
     if not line:
       return self.emptyline()
 
+    print('')
     try:
       (args,kwargs) = self.parseline(line)
     except ArgsError as e:
-      print('*** ArgsError: %s' % e.args[0])
+      self.output('*** ArgsError: %s' % e.args[0])
       return
 
     try:
       func = self.get_cli_cmd(args)
       (char_func,char_args) = self.get_char_cmd(args,kwargs,func)
       if self.debug['args']:
-        print(func)
-        print(char_func)
+        self.output(func)
+        self.output(char_func)
         print('')
       if char_func:
         self.check_args(char_func,char_args,kwargs,
@@ -272,15 +276,15 @@ class CLI(cmd.Cmd):
         result = char_func(*char_args,**kwargs)
         if result!=NotImplemented:
           if result:
-            print(result)
+            self.output(result)
           return
 
       if func:
         return func(args[1:])
 
     except ArgsError as e:
-      print('*** ArgsError: %s' % e.args[0])
-      print('    %s' % e.sig)
+      self.output('*** ArgsError: %s' % e.args[0])
+      self.output('    %s' % e.sig)
       return
 
     except:
@@ -289,7 +293,7 @@ class CLI(cmd.Cmd):
       s = s.split('\n')[-2]
       if '.' in s.split(':')[0]:
         s = s[s.rindex('.',0,s.index(':'))+1:]
-      print('*** '+s)
+      self.output('*** '+s)
       return
 
     return self.default(args)
@@ -319,20 +323,20 @@ class CLI(cmd.Cmd):
       if isinstance(val,dict):
         if len(args)<2:
           if not silent:
-            print('*** Missing sub-command (%s SUBCMD)' % args[0])
-            print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
+            self.output('*** Missing sub-command (%s SUBCMD)' % args[0])
+            self.output('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
             return (None,None)
         elif args[1] in val:
           (func,args) = (val[args[1]],args[2:])
         else:
           if not silent:
-            print('*** Unknown sub-command "%s"' % args[1])
+            self.output('*** Unknown sub-command "%s"' % args[1])
           return (None, None)
       else:
         (func,args) = (val,args[1:])
     else:
       if not silent:
-        print('*** Unknown command "%s"' % args[0])
+        self.output('*** Unknown command "%s"' % args[0])
       return (None,None)
 
     return (func,args)
@@ -508,7 +512,7 @@ class CLI(cmd.Cmd):
       with open(fname,'a') as f:
         pass
     except:
-      print('Unable to write to "%s"' % fname)
+      self.output('Unable to write to "%s"' % fname)
       return False
 
     self.char.save(fname)
@@ -530,6 +534,17 @@ class CLI(cmd.Cmd):
       return True
     return False
 
+  # add our indent to any inputs
+  def input(self, s):
+
+    return input(self.indent + s + ': ').strip()
+
+  # add our indent to any result output
+  def output(self, s):
+
+    s = str(s).replace('\n', '\n' + self.indent)
+    print(self.indent + s)
+
 ###############################################################################
 # user commands
 ###############################################################################
@@ -548,14 +563,14 @@ class CLI(cmd.Cmd):
       func = self.exported[args[0]]
       if isinstance(func,dict):
         if len(args)<2 or args[1] not in func:
-          print('*** Missing sub-command (%s SUBCMD)' % args[0])
-          print('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
+          self.output('*** Missing sub-command (%s SUBCMD)' % args[0])
+          self.output('***   valid: %s' % ','.join(sorted(list(self.exported_sub))))
           return
         func = func[args[1]]
 
       # first line is always the signature
       print('')
-      print('# '+self.get_sig(func)[0])
+      self.output('# '+self.get_sig(func)[0])
 
       # look for __doc__ text in the function ot its parent
       if not func.__doc__:
@@ -571,8 +586,8 @@ class CLI(cmd.Cmd):
         leading = len(lines[0])-len(lines[0].lstrip())
         if leading>0:
           lines = [x[leading:] for x in lines]
-        print('#')
-        print('\n'.join(['# '+x for x in lines]))
+        self.output('#')
+        self.output('\n'.join(['# '+x for x in lines]))
         return
 
     # if the requested function is defined here rather than in our Character
@@ -596,18 +611,19 @@ class CLI(cmd.Cmd):
     """load a character from a file"""
 
     if not args:
-      print('Missing file name')
+      self.output('Missing file name')
     elif not self.overwrite():
       return
     elif not os.path.isfile(args[0]):
-      print('Unable to read "%s"' % args[0])
+      self.output('Unable to read "%s"' % args[0])
     else:
-      (c, errors) = char.Character.load(args[0], logger=self.logger)
+      (c, errors) = char.Character.load(args[0],
+          logger=self.logger, output_func=self.output, input_func=self.input)
 
       # print semi-detailed errors to help with debugging
       if errors:
-        print('Failed to load "%s"' % args[0])
-        print('\n'.join(errors))
+        self.output('Failed to load "%s"' % args[0])
+        self.output('\n'.join(errors))
       else:
         self.unplug()
         self.plug(c)
@@ -636,10 +652,11 @@ class CLI(cmd.Cmd):
     args = 'Pathfinder' if not args else args[0]
 
     try:
-      c = char.Character.new(args, logger=self.logger)
+      c = char.Character.new(args, logger=self.logger,
+          input_func=self.input, output_func=self.output)
     except KeyError:
-      print('Unknown Character type "%s"; known types:' % args)
-      print('  '+'\n  '.join(sorted(char.Character.get_systems())))
+      self.output('Unknown Character type "%s"; known types:' % args)
+      self.output('  '+'\n  '.join(sorted(char.Character.get_systems())))
       return
 
     self.plug(c)
@@ -649,9 +666,9 @@ class CLI(cmd.Cmd):
     """roll some dice"""
 
     try:
-      print(Dice(' '.join(args)).roll())
+      self.output(Dice(' '.join(args)).roll())
     except ValueError:
-      print('*** invalid Dice string "%s"' % ' '.join(args))
+      self.output('*** invalid Dice string "%s"' % ' '.join(args))
 
 ###############################################################################
 # Dev commands
@@ -661,9 +678,9 @@ class CLI(cmd.Cmd):
     """[DEV] run eval() on input"""
 
     try:
-      print(eval(' '.join(args)))
+      self.output(eval(' '.join(args)))
     except:
-      print(traceback.format_exc())
+      self.output(traceback.format_exc())
 
   def do_exec(self,args):
     """[DEV] run exec() on input"""
@@ -671,18 +688,18 @@ class CLI(cmd.Cmd):
     try:
       exec(' '.join(args))
     except:
-      print(traceback.format_exc())
+      self.output(traceback.format_exc())
 
   def do_trace(self,args):
     """[DEV] print traceback for last exception"""
 
-    print(self.last_trace)
+    self.output(self.last_trace)
 
   def do_args(self,args):
     """[DEV] toggle printing args"""
 
     self.debug['args'] = not self.debug['args']
-    print('Print args: %s' % self.debug['args'])
+    self.output('Print args: %s' % self.debug['args'])
 
   def do_nop(self,args):
     """[DEV] do nothing"""
@@ -692,12 +709,12 @@ class CLI(cmd.Cmd):
   def old_load(self,args):
 
     if not args:
-      print('Missing file name')
+      self.output('Missing file name')
       return
     if not self.overwrite():
       return
     if not os.path.isfile(args[0]):
-      print('Unable to read "%s"' % args[0])
+      self.output('Unable to read "%s"' % args[0])
       return
     try:
       with open(args[0],'rb') as f:
@@ -705,7 +722,7 @@ class CLI(cmd.Cmd):
         self.fname = args[0]
         self.modified = False
     except Exception:
-      print('Unable to unpickle "%s"' % args[0])
+      self.output('Unable to unpickle "%s"' % args[0])
 
   def old_save(self,args):
 
@@ -716,7 +733,7 @@ class CLI(cmd.Cmd):
       with open(fname,'a') as f:
         pass
     except:
-      print('Unable to write "%s"' % fname)
+      self.output('Unable to write "%s"' % fname)
       return
     try:
       with open(fname,'wb') as f:
@@ -725,7 +742,7 @@ class CLI(cmd.Cmd):
       self.modified = False
       return False
     except:
-      print('Unable to pickle character')
+      self.output('Unable to pickle character')
 
 ###############################################################################
 # cli invocation hook

@@ -1043,10 +1043,10 @@ class Character(object):
             valid=lambda x:x not in self.bonuses
         ) or b_name
 
-        b_value = self._input(
-            'Bonus#%s value' % n,
-            blank=False,
-            parse=int
+        b_formula = self._input(
+            'Bonus#%s formula' % n,
+            blank=False
+            # parse= [TODO] put a parse function here
         )
 
         b_stats = self._input(

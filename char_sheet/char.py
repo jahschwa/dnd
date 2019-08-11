@@ -1040,7 +1040,7 @@ class Character(object):
         b_name = '_%s_%s' % (name,n)
         b_name = self._input(
             'Bonus#%s name (%s)' % (n,b_name),
-            valid=lambda x:x not in self.bonuses
+            valid=lambda x:x not in self.bonuses # [TODO] validation regex
         ) or b_name
 
         b_formula = self._input(
@@ -1061,7 +1061,7 @@ class Character(object):
             valid=lambda x:x in self.BONUS_TYPES
         ) or None
 
-        bonuses.append(Bonus(b_name,b_value,b_stats,b_typ))
+        bonuses.append(Bonus(b_name, b_formula, b_stats, b_typ))
         self.output('')
 
     except UserSkipException:

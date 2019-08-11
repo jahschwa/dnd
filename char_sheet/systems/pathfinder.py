@@ -329,7 +329,7 @@ class Pathfinder(Character):
 
     size = size[0].lower()
     i = list(self.SIZE_NAMES.keys()).index(size)
-    self.set_stat('size',self.SIZES[i],self.SIZE_NAMES[size])
+    self.set_stat('size', formula=self.SIZES[i], text=self.SIZE_NAMES[size])
 
   # if None, use the values from this Character
   # @param xp (int) [None] amount of experience
@@ -366,10 +366,10 @@ class Pathfinder(Character):
       raise ValueError('damage must be > 0')
 
     if nonlethal:
-      self.set_stat('nonlethal',self.stats['nonlethal'].value+damage)
+      self.set_stat('nonlethal', formula=self.stats['nonlethal'].value+damage)
     else:
       if '_damage' in self.bonuses:
-        self.set_bonus('_damage',self.bonuses['_damage'].value-damage)
+        self.set_bonus('_damage', formula=self.bonuses['_damage'].value-damage)
       else:
         self.add_bonus('_damage',-damage,'hp')
       if damage>=50 and damage>=int(self._max_hp()/2):
@@ -393,11 +393,11 @@ class Pathfinder(Character):
     damage = min(damage,current)
 
     if '_damage' in self.bonuses and damage:
-      self.set_bonus('_damage',self.bonuses['_damage'].value+damage)
+      self.set_bonus('_damage', formula=self.bonuses['_damage'].value+damage)
       if self.bonuses['_damage'].value==0:
         self.del_bonus('_damage')
     if nonlethal:
-      self.set_stat('nonlethal',self.stats['nonlethal'].value-nonlethal)
+      self.set_stat('nonlethal', formula=self.stats['nonlethal'].value-nonlethal)
 
   def skill(self,action='info',name=None,value=0):
     """
@@ -486,11 +486,11 @@ class Pathfinder(Character):
       if gained<=0:
         raise ValueError('XP value must be > 0')
       old = self.stats['level'].value
-      self.set_stat('xp',self.stats['xp'].value+gained)
+      self.set_stat('xp', formula=self.stats['xp'].value+gained)
       new = self._calc_lvl()
       if new>old:
         print('### Level up: %s --> %s' % (old,new))
-        self.set_stat('level',new)
+        self.set_stat('level', formula=new)
       return self.xp()
 
 ###############################################################################
@@ -568,10 +568,10 @@ class Pathfinder(Character):
         valid = lambda x: x>0
     )
     if level:
-      self.set_stat('level',level)
+      self.set_stat('level', formula=level)
       prog = self.texts['xp_prog'].text
       xp = int(1000*self.XP[prog][level-1])
-      self.set_stat('xp',xp)
+      self.set_stat('xp', formula=xp)
       print('current xp: %s' % util.group(xp))
 
   def _wiz_race(self):
@@ -593,7 +593,7 @@ class Pathfinder(Character):
     self._set_size(size)
 
     speed = info[self.RACE_INDEX.index('speed')]
-    self.set_stat('speed',speed)
+    self.set_stat('speed', formula=speed)
 
     bonuses = info[self.RACE_INDEX.index('bonuses')]
     if len(bonuses):
@@ -636,7 +636,7 @@ class Pathfinder(Character):
     info = self.CLASS_INFO[clas]
 
     hd = info[self.CLASS_INDEX.index('hd')]
-    self.set_stat('hit_die',hd)
+    self.set_stat('hit_die', formula=hd)
     print('hit die: d%s' % hd)
 
     names = list(self.SKILLS.keys())
@@ -650,7 +650,7 @@ class Pathfinder(Character):
     print('class skills: %s' % ','.join(skills))
 
     prog = info[self.CLASS_INDEX.index('bab')]
-    self.set_stat('bab','int(%s*$level)' % prog)
+    self.set_stat('bab', formula='int(%s*$level)' % prog)
     print('bab progression: %s' % prog)
 
     mods = ('con','dex','wis')
@@ -662,13 +662,13 @@ class Pathfinder(Character):
         good.append(save)
       base = self.CLASS_SAVES[prog].replace('x','$level')
       new = '$%s+%s' % (mod,base)
-      self.set_stat(save,new,force=True)
+      self.set_stat(save, formula=new, force=True)
     print('good saves: %s' % ','.join(good))
 
     mod = info[self.CLASS_INDEX.index('cast_mod')]
     if mod:
-      self.set_stat('spell_mod','$'+mod)
-      self.set_stat('spells_mod','#'+mod)
+      self.set_stat('spell_mod', formula='$'+mod)
+      self.set_stat('spells_mod', formula='#'+mod)
       print('casting mod: %s' % mod)
 
   def _wiz_abilities(self):
@@ -677,7 +677,7 @@ class Pathfinder(Character):
     self._inputs(
         [(  '%s (%s)' % (a,self.stats[a].normal),
             a,
-            lambda k,v:self.set_stat(k,str(v))
+            lambda k,v:self.set_stat(k, formula=str(v))
         ) for a in self.ABILITIES],
         parse = int,
         valid = lambda x: x>=0
@@ -691,7 +691,7 @@ class Pathfinder(Character):
         a = self.ABILITIES[int(a)]
         adjust = (-2 if i==2 else 2)
         new = self.stats[a].value+adjust
-        self.set_stat(a,new)
+        self.set_stat(a, formula=new)
         print('%s%s %s' % ('+' if adjust>0 else '',adjust,a))
 
   def _wiz_hp(self):
@@ -702,7 +702,7 @@ class Pathfinder(Character):
         parse = int,
         valid = lambda x: x>0
     )
-    self.set_stat('hp_max',hp)
+    self.set_stat('hp_max', formula=hp)
 
   def _wiz_skill(self):
     """Skill ranks"""

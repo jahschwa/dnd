@@ -331,14 +331,18 @@ class Character(object):
   def _setup(self,ignore_dupes=False):
 
     for typ in self.letters.values():
-      for (name,s) in getattr(self,typ.upper()+'S').items():
-        try:
-          getattr(self,'add_'+typ)(name,str(s))
-        except DuplicateError:
-          if ignore_dupes:
-            pass
-          else:
-            raise
+      for suffix in ('S', 'ES'):
+        fields = getattr(self, typ.upper() + suffix, {})
+        for (name,args) in fields.items():
+          try:
+            if not isinstance(args, list):
+              args = [args]
+            getattr(self, 'add_' + typ)(name, *args)
+          except DuplicateError:
+            if ignore_dupes:
+              pass
+            else:
+              raise
 
     if self.name:
       self.set_text('name',self.name)

@@ -9,7 +9,6 @@ from dnd.char_sheet.errors import *
 # [TODO] level up wiz
 # [TODO] multiclassing?
 # [TODO] raise warning / limit skill ranks? _total_ranks stat?
-# [TODO] conditional jump modifier based on move speed
 # [TODO] craft, profession, perform
 # [TODO] class skills
 # [TODO] max_dex
@@ -108,6 +107,9 @@ class Pathfinder(Character):
       'size','trait','penalty','none')
   BONUS_STACK = ('none','dodge','circumstance','racial','penalty')
   BONUS_PERM = ('inherent','racial','trait')
+  PF_BONUSES = OrderedDict([
+    ('_jump_speed', ['int(($speed-30)/10*4)', 'acrobatics', None, 'when jumping']),
+  ])
 
   AC_BONUS = {'armor':'_ac_armor','deflection':'_ac_deflect','dodge':'_ac_dex',
       'natural_armor':'_ac_nat','shield':'_ac_shield','size':'_ac_size'}
@@ -263,6 +265,15 @@ class Pathfinder(Character):
       skill = PathfinderSkill(name, formula)
       try:
         self._add_stat(skill)
+      except DuplicateError:
+        if ignore_dupes:
+          pass
+        else:
+          raise
+
+    for (name, args) in self.PF_BONUSES.items():
+      try:
+        self.add_bonus(name, *args)
       except DuplicateError:
         if ignore_dupes:
           pass

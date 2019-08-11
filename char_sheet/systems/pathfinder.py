@@ -373,7 +373,7 @@ class Pathfinder(Character):
       else:
         self.add_bonus('_damage',-damage,'hp')
       if damage>=50 and damage>=int(self._max_hp()/2):
-        print('!!! Massive damage')
+        self.output('!!! Massive damage')
 
   def heal(self,damage):
     """
@@ -451,7 +451,7 @@ class Pathfinder(Character):
       except Exception as e:
         result = '*** %s (%s) %s' % (e.__class__.__name__,n,e.args[0])
       if result:
-        print(result)
+        self.output(result)
 
   def xp(self,action='info',value=0):
     """
@@ -473,7 +473,7 @@ class Pathfinder(Character):
       lvl = self.stats['level'].value
       expected = self._calc_lvl()
       if expected!=lvl:
-        print('### %s XP should be Lvl %s but our level is set to %s' %
+        self.output('### %s XP should be Lvl %s but our level is set to %s' %
             (util.group(xp),expected,lvl))
       if expected==20:
         return '%s / Lvl 20' % util.group(xp)
@@ -489,7 +489,7 @@ class Pathfinder(Character):
       self.set_stat('xp', formula=self.stats['xp'].value+gained)
       new = self._calc_lvl()
       if new>old:
-        print('### Level up: %s --> %s' % (old,new))
+        self.output('### Level up: %s --> %s' % (old,new))
         self.set_stat('level', formula=new)
       return self.xp()
 
@@ -536,7 +536,7 @@ class Pathfinder(Character):
       raise ValueError('invalid sub-command "%s"' % action)
 
     if action=='help':
-      print('(wiz) [all] (%s)' % ('|'.join(sorted(actions+standalone))))
+      self.output('(wiz) [all] (%s)' % ('|'.join(sorted(actions+standalone))))
 
     else:
       actions = actions if action=='all' else [action]
@@ -544,7 +544,8 @@ class Pathfinder(Character):
         for action in actions:
           action = getattr(self,'_wiz_'+action)
           if len(actions)>1:
-            print('\n=== %s' % action.__doc__)
+            print('')
+            self.output('=== %s' % action.__doc__)
           try:
             action()
           except UserSkipException:
@@ -572,13 +573,13 @@ class Pathfinder(Character):
       prog = self.texts['xp_prog'].text
       xp = int(1000*self.XP[prog][level-1])
       self.set_stat('xp', formula=xp)
-      print('current xp: %s' % util.group(xp))
+      self.output('current xp: %s' % util.group(xp))
 
   def _wiz_race(self):
     """Race"""
 
     if self.texts['race'].text:
-      print("+++ WARNING: if you've already run this command don't re-run it")
+      self.output("+++ WARNING: if you've already run this command don't re-run it")
 
     race = self._input(
         'Enter race name',
@@ -597,7 +598,7 @@ class Pathfinder(Character):
 
     bonuses = info[self.RACE_INDEX.index('bonuses')]
     if len(bonuses):
-      print('--- racial bonuses')
+      self.output('--- racial bonuses')
     for bonus in bonuses:
       args = bonus[:3]+['racial']
       args[0] = '%s_%s' % (race,args[0])
@@ -608,24 +609,24 @@ class Pathfinder(Character):
         else:
           args += [s]
       self.add_bonus(*args)
-      print('  %s' % self.bonuses[args[0]]._str())
+      self.output('  %s' % self.bonuses[args[0]]._str())
 
     traits = info[self.RACE_INDEX.index('traits')]
     if traits:
       self.set_text('race_traits','\n'.join(traits))
-      print('--- all text race_traits')
+      self.output('--- all text race_traits')
       for t in traits:
-        print('  %s' % t)
+        self.output('  %s' % t)
 
     manual = info[self.RACE_INDEX.index('manual')]
     for s in manual:
-      print('+++ NOTE: %s' % s)
+      self.output('+++ NOTE: %s' % s)
 
   def _wiz_class(self):
     """Class skills, BAB, Saves"""
 
     if self.texts['class'].text:
-      print("+++ WARNING: if you've already run this command don't re-run it")
+      self.output("+++ WARNING: if you've already run this command don't re-run it")
 
     clas = self._input(
         'Enter class name',
@@ -637,7 +638,7 @@ class Pathfinder(Character):
 
     hd = info[self.CLASS_INDEX.index('hd')]
     self.set_stat('hit_die', formula=hd)
-    print('hit die: d%s' % hd)
+    self.output('hit die: d%s' % hd)
 
     names = list(self.SKILLS.keys())
     one_hot = info[self.CLASS_INDEX.index('skills')]
@@ -647,11 +648,11 @@ class Pathfinder(Character):
         skill = names[i]
         skills.append(skill)
         self.stat[skill].set_cskill()
-    print('class skills: %s' % ','.join(skills))
+    self.output('class skills: %s' % ','.join(skills))
 
     prog = info[self.CLASS_INDEX.index('bab')]
     self.set_stat('bab', formula='int(%s*$level)' % prog)
-    print('bab progression: %s' % prog)
+    self.output('bab progression: %s' % prog)
 
     mods = ('con','dex','wis')
     progs = info[self.CLASS_INDEX.index('saves')]
@@ -663,13 +664,13 @@ class Pathfinder(Character):
       base = self.CLASS_SAVES[prog].replace('x','$level')
       new = '$%s+%s' % (mod,base)
       self.set_stat(save, formula=new, force=True)
-    print('good saves: %s' % ','.join(good))
+    self.output('good saves: %s' % ','.join(good))
 
     mod = info[self.CLASS_INDEX.index('cast_mod')]
     if mod:
       self.set_stat('spell_mod', formula='$'+mod)
       self.set_stat('spells_mod', formula='#'+mod)
-      print('casting mod: %s' % mod)
+      self.output('casting mod: %s' % mod)
 
   def _wiz_abilities(self):
     """Ability scores"""
@@ -692,7 +693,7 @@ class Pathfinder(Character):
         adjust = (-2 if i==2 else 2)
         new = self.stats[a].value+adjust
         self.set_stat(a, formula=new)
-        print('%s%s %s' % ('+' if adjust>0 else '',adjust,a))
+        self.output('%s%s %s' % ('+' if adjust>0 else '',adjust,a))
 
   def _wiz_hp(self):
     """Hitpoints"""
@@ -707,7 +708,7 @@ class Pathfinder(Character):
   def _wiz_skill(self):
     """Skill ranks"""
 
-    print('+++ Max ranks: %s' % self.stats['level'].value)
+    self.output('+++ Max ranks: %s' % self.stats['level'].value)
     self._inputs(
         [(  '%s (%s)' % (s,self.stats[s].ranks),
             s,

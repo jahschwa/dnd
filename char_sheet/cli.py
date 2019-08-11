@@ -287,6 +287,9 @@ class CLI(cmd.Cmd):
       self.output('    %s' % e.sig)
       return
 
+    except KeyboardInterrupt:
+      print('')
+
     except:
       s = traceback.format_exc()
       self.last_trace = s.strip()

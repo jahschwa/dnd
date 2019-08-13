@@ -255,12 +255,19 @@ class CLI(cmd.Cmd):
 
     if not line:
       return self.emptyline()
+    self.logger.debug('USERINPUT "%s"' % line)
 
     print('')
     try:
       (args,kwargs) = self.parseline(line)
+      if args:
+        self.logger.debug('    ARGS %s' % args)
+      if kwargs:
+        self.logger.debug('    KWARGS %s' % kwargs)
     except ArgsError as e:
-      self.output('*** ArgsError: %s' % e.args[0])
+      s = '*** ArgsError: %s' % e.args[0]
+      self.output(s)
+      self.log_exc(s, traceback.format_exc(), 'debug')
       return
 
     try:
@@ -271,6 +278,7 @@ class CLI(cmd.Cmd):
         self.output(char_func)
         print('')
       if char_func:
+        self.logger.info('    CHARCMD %s' % char_func.__name__)
         self.check_args(char_func,char_args,kwargs,
             getattr(char_func,'_arbargs',False))
         result = char_func(*char_args,**kwargs)
@@ -280,11 +288,14 @@ class CLI(cmd.Cmd):
           return
 
       if func:
+        self.logger.info('    CLICMD %s' % func.__name__)
         return func(args[1:])
 
     except ArgsError as e:
-      self.output('*** ArgsError: %s' % e.args[0])
+      s = '*** ArgsError: %s' % e.args[0]
+      self.output(s)
       self.output('    %s' % e.sig)
+      self.log_exc(s, traceback.format_exc(), 'debug')
       return
 
     except:
@@ -294,6 +305,7 @@ class CLI(cmd.Cmd):
       if '.' in s.split(':')[0]:
         s = s[s.rindex('.',0,s.index(':'))+1:]
       self.output('*** '+s)
+      self.log_exc(s, self.last_trace)
       return
 
     return self.default(args)
@@ -544,6 +556,12 @@ class CLI(cmd.Cmd):
 
     s = str(s).replace('\n', '\n' + self.indent)
     print(self.indent + s)
+
+  # log exception info
+  def log_exc(self, s, trace, level='error'):
+
+    getattr(self.logger, level)(s)
+    self.logger.debug(trace)
 
 ###############################################################################
 # user commands

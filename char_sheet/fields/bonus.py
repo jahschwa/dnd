@@ -64,37 +64,33 @@ class Bonus(Stat):
     self.effects = set()
     self.last = active # remember the state we're in before a toggle
 
-  # @param char (Character)
   # @raise ValueError if our type isn't in our Character
-  def plug(self,char):
+  def _plug(self):
 
     # I'd rather have this in __init__ but we don't have a char at that point
-    if char.BONUS_TYPES and self.typ not in char.BONUS_TYPES:
-      raise ValueError('invalid bonus type "%s"' % self.typ)
+    if self.char.BONUS_TYPES and self.typ not in self.char.BONUS_TYPES:
+      raise ValueError('%s.%s: invalid bonus type "%s"'
+          % (self.__class__.__name__, self.name, self.typ))
 
-    super().plug(char)
+    super()._plug()
 
     for name in self.stats:
-      stat = char.stats[name]
+      stat = self.char.stats[name]
       stat.add_bonus(self)
       stat.calc()
-    self.char = char
 
     # some bonuses should never be turned off
     if not self.condition and self.typ in self.char.BONUS_PERM:
       self.active = True
 
-  def unplug(self, force=False):
-
-    if not self.char:
-      raise RuntimeError('plug() must be called before unplug()')
+  def _unplug(self, force=False):
 
     for name in self.stats:
       stat = self.char.stats[name]
       stat.del_bonus(self)
       stat.calc()
 
-    super().unplug(force=force)
+    super()._unplug(force=force)
 
   # @return (int) the value of this bonus
   def get_value(self):

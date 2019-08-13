@@ -83,14 +83,12 @@ class Stat(Field):
     self.COPY = []
 
   # @raise FormulaError
-  def plug(self,char):
-
-    self.char = char
+  def _plug(self):
 
     # iterate over each stat in the character and replace matching #/$ aliases
     s = self.formula
     usedby = set()
-    for name in char.stats:
+    for name in self.char.stats:
       for (var,expand) in self.VARS.items():
         orig = s
         s = s.replace(var+name,expand % name)
@@ -98,7 +96,7 @@ class Stat(Field):
         if s!=orig:
           self.uses.add(name)
           self.root = False
-          usedby.add(char.stats[name])
+          usedby.add(self.char.stats[name])
 
     # iterate over our attributes and replace matching @ aliases
     for name in dir(self):
@@ -126,13 +124,11 @@ class Stat(Field):
   # @param recursive (bool) [False] remove all our dependants as well
   # @raise RuntimeError if we don't have a character
   # @raise DependencyError
-  def unplug(self,force=False,recursive=False):
-
-    if not self.char:
-      raise RuntimeError('plug() must be called before unplug()')
+  def _unplug(self, force=False, recursive=False):
 
     if self.usedby and not force and not recursive:
-      raise DependencyError('still usedby: '+','.join(self.usedby))
+      raise DependencyError('%s.%s: still usedby: %s'
+          % (self.__class__.__name__, self.name, ','.join(self.usedby)))
 
     # unplug our dependants if requested
     if recursive:
@@ -152,7 +148,6 @@ class Stat(Field):
 
     self.root = True
     self.leaf = True
-    self.char = None
 
   # convenience method that sets self.formula and self.original
   # @param s (str) formula
@@ -160,7 +155,8 @@ class Stat(Field):
   def set_formula(self,s):
 
     if self.char:
-      raise RuntimeError('set_formula() must be called before plug()')
+      raise RuntimeError('%s.%s: set_formula() must be called before plug()'
+          % (self.__class__.__name__, self.name))
 
     self.formula = s
     self.original = s
@@ -168,13 +164,16 @@ class Stat(Field):
   # @raise RuntimeError if we don't have a character
   def calc(self):
 
+    self.char.debug('CALC %s.%s' % (self.__class__.__name__, self.name))
+
     if not self.char:
-      raise RuntimeError('plug() must be called before calc()')
+      raise RuntimeError('%s.%s: plug() must be called before calc()'
+          % (self.__class__.__name__, self.name))
 
     (b, c) = self.get_bonuses()
     b = ','.join(sorted([x[1].name for x in b])) or 'none'
     c = ','.join(sorted([x[1].name for x in c])) or 'none'
-    self.char.debug('CALC %s = [%s] + (%s) ? (%s)' % (self.name, self.original, b, c))
+    self.char.debug('    FORMULA [%s] + (%s) ? (%s)' % (self.original, b, c))
 
     # evaluate our formula without bonuses
     old_v = self.value
@@ -192,7 +191,8 @@ class Stat(Field):
       else:
         self.value += max(bonuses)
 
-    self.char.debug('CALC %s = %s + bonuses = %s' % (self.name, self.normal, self.value))
+    self.char.debug('    RESULT %s = %s + bonuses = %s'
+        % (self.name, self.normal, self.value))
 
     # if we changed, bubble the calc() up through our dependants
     if old_v!=self.value or old_n!=self.normal:

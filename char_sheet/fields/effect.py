@@ -39,26 +39,20 @@ class Effect(Field):
       raise TypeError('duration must be Duration not "%s"'
           % self.duration.__class__.__name__)
 
-  # @param char (Character)
-  def plug(self,char):
+  def _plug(self):
 
     for name in self.bonuses:
-      char.bonuses[name].effects.add(self.name)
+      self.char.bonuses[name].effects.add(self.name)
 
-    self.char = char
     self.calc(force=True)
 
   # @raise RuntimeError if plug() wasn't called first
-  def unplug(self):
-
-    if not self.char:
-      raise RuntimeError('plug() must be called before unplug()')
+  def _unplug(self):
 
     for name in self.bonuses:
       bonus = self.char.bonuses[name]
       bonus.effects.remove(self.name)
       bonus.off()
-    self.char = None
 
   # update our bonuses
   # @param force (bool) if False, only update if it looks like we changed

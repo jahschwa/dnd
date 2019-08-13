@@ -91,12 +91,34 @@ class Field(object):
 
   # create variables and establish dependencies in a Character
   # @param (Character) the character to plug into
-  def plug(self,char):
+  def plug(self, char, *args, **kwargs):
+
+    char.debug('PLUG %s.%s' % (self.__class__.__name__, self.name))
+    self.char = char
+    try:
+      self._plug(*args, **kwargs)
+    except:
+      self.char = None
+      raise
+
+  # to be overriden in children
+  def _plug(self):
     pass
 
   # try to remove ourself from the Character, checking for dependency issues
   # @raise DependencyError if other Fields depend on us
-  def unplug(self):
+  def unplug(self, *args, **kwargs):
+
+    self.char.debug('UNPLUG %s.%s' % (self.__class__.__name__, self.name))
+
+    if not self.char:
+      raise RuntimeError('plug() must be called before unplug()')
+
+    self._unplug(*args, **kwargs)
+    self.char = None
+
+  # to be overriden in children
+  def _unplug(self):
     pass
 
   # recalculate our value

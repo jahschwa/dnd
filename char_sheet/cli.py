@@ -33,14 +33,14 @@
 #
 # ===== PLANNED FOR THE FUTURE =====
 #
+# >>> get stat ac,ff,touch
+# r-  13 ac (b:0/1 ?:0/0)
+# r-  10 ac_ff (b:0/1 ?:0/0)
+# r-  13 ac_touch (b:0/0 ?:0/0)
+#
 # >>> get ac,ac_ff,ac_touch with mage_armor
 # r-  17 ac (b:1/1 ?:0/0)
 # r-  14 ac_ff (b:1/1 ?:0/0)
-# r-  13 ac_touch (b:0/0 ?:0/0)
-#
-# >>> get stat ac,ff,touch
-# r-  13 ac (b:1/1 ?:0/0)
-# r-  10 ac_ff (b:1/1 ?:0/0)
 # r-  13 ac_touch (b:0/0 ?:0/0)
 
 # ===== QUICK COMMAND LISTING =====
@@ -52,6 +52,7 @@
 # new [system]
 # save [filename]
 # roll [dice]
+# exit
 #
 # search [name]
 # get [type] [name]
@@ -110,9 +111,9 @@ def main(args=None):
     try:
       cli.cmdloop()
       run = False
-    except (KeyboardInterrupt,EOFError):
+    except (KeyboardInterrupt, EOFError):
       print('\n')
-      cli.output('*** Use Ctrl+D / EOF at the main prompt to exit')
+      cli.output('*** Type "exit" / Use Ctrl+D at the main prompt to exit')
       print('')
       pass
 
@@ -575,6 +576,8 @@ class CLI(cmd.Cmd):
 
     if self.overwrite():
       return True
+  do_exit = do_EOF
+  do_quit = do_EOF
 
   def do_help(self,args):
     """show help text for commands"""

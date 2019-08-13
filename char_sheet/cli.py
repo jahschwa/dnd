@@ -298,6 +298,9 @@ class CLI(cmd.Cmd):
       self.log_exc(s, traceback.format_exc(), 'debug')
       return
 
+    except KeyboardInterrupt:
+      print('')
+
     except:
       s = traceback.format_exc()
       self.last_trace = s.strip()

@@ -878,18 +878,24 @@ class Character(object):
       raise
 
   # @raise KeyError if name does not exist
-  def del_effect(self,name):
+  def del_effect(self, name, recursive=False):
     """
     delete an Effect
       - name (string)
+      - recursive (bool) [False] also delete our bonuses
     """
 
     try:
-      self.effects[name].unplug()
+      e = self.effects[name]
     except KeyError:
       raise KeyError('unknown effect "%s"' % name)
 
+    e.unplug()
     del self.effects[name]
+
+    if recursive is not False:
+      for bonus in e.bonuses:
+        self.del_bonus(bonus)
 
   # @param text (Text) the Text to add
   # @raise DuplicateError if the name already exists

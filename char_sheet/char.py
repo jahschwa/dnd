@@ -767,8 +767,12 @@ class Character(object):
 
     if bonus.name in self.bonuses:
       raise DuplicateError('bonus "%s" already exists' % bonus.name)
-    bonus.plug(self)
     self.bonuses[bonus.name] = bonus
+    try:
+      bonus.plug(self)
+    except:
+      del self.bonuses[bonus.name]
+      raise
 
   # @raise DuplicateError if name already exists
   # @raise FormulaError if formula contains errors

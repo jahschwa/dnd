@@ -77,7 +77,7 @@ class Bonus(Stat):
     for name in self.stats:
       stat = self.char.stats[name]
       stat.add_bonus(self)
-      stat.calc()
+      stat.calc(self)
 
     # some bonuses should never be turned off
     if not self.condition and self.typ in self.char.BONUS_PERM:
@@ -88,7 +88,7 @@ class Bonus(Stat):
     for name in self.stats:
       stat = self.char.stats[name]
       stat.del_bonus(self)
-      stat.calc()
+      stat.calc(self)
 
     super()._unplug(force=force)
 
@@ -96,12 +96,11 @@ class Bonus(Stat):
   def get_value(self):
     return self.value
 
-  def calc(self):
+  def calc(self, caller=None):
 
-    super().calc()
-
-    for name in self.stats:
-      self.char.stats[name].calc()
+    if not super().calc(caller):
+      for name in self.stats:
+        self.char.stats[name].calc(caller or self)
 
   def on(self):
     self.toggle(True)

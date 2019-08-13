@@ -162,9 +162,15 @@ class Stat(Field):
     self.original = s
 
   # @raise RuntimeError if we don't have a character
-  def calc(self):
+  def calc(self, caller=None):
 
-    self.char.debug('CALC %s.%s' % (self.__class__.__name__, self.name))
+    if caller and (type(self), self.name) == (type(caller), caller.name):
+      return True
+
+    self.char.debug('CALC %s.%s (caller: %s)' % (
+        self.__class__.__name__, self.name,
+        'None' if not caller else '%s.%s' % (
+            caller.__class__.__name__, caller.name)))
 
     if not self.char:
       raise RuntimeError('%s.%s: plug() must be called before calc()'
@@ -201,7 +207,7 @@ class Stat(Field):
           stat = self.char.stats[stat]
         except KeyError:
           stat = self.char.bonuses[stat]
-        stat.calc()
+        stat.calc(caller or self)
 
   # add a bonus to this stat that will affect its value
   # @param bonus (Bonus) the Bonus to add

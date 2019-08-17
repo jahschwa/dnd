@@ -205,7 +205,7 @@ class CLI(cmd.Cmd):
     if self.fname:
       self.do_load([self.fname])
 
-    self.debug = {
+    self.debug_flags = {
         'args' : False
     }
 
@@ -240,7 +240,7 @@ class CLI(cmd.Cmd):
   def parseline(self,line):
 
     (args,kwargs) = self.get_args(line)
-    if self.debug['args']:
+    if self.debug_flags['args']:
       self.output(args)
       self.output(kwargs)
       print('')
@@ -256,15 +256,15 @@ class CLI(cmd.Cmd):
 
     if not line:
       return self.emptyline()
-    self.logger.debug('USERINPUT "%s"' % line)
+    self.debug('USERINPUT "%s"' % line)
 
     print('')
     try:
       (args,kwargs) = self.parseline(line)
       if args:
-        self.logger.debug('    ARGS %s' % args)
+        self.debug('    ARGS %s' % args)
       if kwargs:
-        self.logger.debug('    KWARGS %s' % kwargs)
+        self.debug('    KWARGS %s' % kwargs)
     except ArgsError as e:
       s = '*** ArgsError: %s' % e.args[0]
       self.output(s)
@@ -274,12 +274,12 @@ class CLI(cmd.Cmd):
     try:
       func = self.get_cli_cmd(args)
       (char_func,char_args) = self.get_char_cmd(args,kwargs,func)
-      if self.debug['args']:
+      if self.debug_flags['args']:
         self.output(func)
         self.output(char_func)
         print('')
       if char_func:
-        self.logger.info('    CHARCMD %s' % char_func.__name__)
+        self.info('    CHARCMD %s' % char_func.__name__)
         self.check_args(char_func,char_args,kwargs,
             getattr(char_func,'_arbargs',False))
         result = char_func(*char_args,**kwargs)
@@ -289,7 +289,7 @@ class CLI(cmd.Cmd):
           return
 
       if func:
-        self.logger.info('    CLICMD %s' % func.__name__)
+        self.info('    CLICMD %s' % func.__name__)
         return func(args[1:])
 
     except ArgsError as e:
@@ -561,11 +561,26 @@ class CLI(cmd.Cmd):
     s = str(s).replace('\n', '\n' + self.indent)
     print(self.indent + s)
 
+  # logging functions
+  def log(self, s, level='info'):
+    if self.logger:
+      getattr(self.logger, level)(s)
+  def debug(self, s):
+    self.log(s, 'debug')
+  def info(self, s):
+    self.log(s, 'info')
+  def warning(self, s):
+    self.log(s, 'warning')
+  def error(self, s):
+    self.log(s, 'error')
+  def critical(self, s):
+    self.log(s, 'critical')
+
   # log exception info
   def log_exc(self, s, trace, level='error'):
 
-    getattr(self.logger, level)(s)
-    self.logger.debug(trace)
+    self.log(s, level)
+    self.debug(trace)
 
 ###############################################################################
 # user commands
@@ -722,8 +737,8 @@ class CLI(cmd.Cmd):
   def do_args(self,args):
     """[DEV] toggle printing args"""
 
-    self.debug['args'] = not self.debug['args']
-    self.output('Print args: %s' % self.debug['args'])
+    self.debug_flags['args'] = not self.debug_flags['args']
+    self.output('Print args: %s' % self.debug_flags['args'])
 
   def do_nop(self,args):
     """[DEV] do nothing"""

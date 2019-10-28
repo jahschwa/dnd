@@ -23,7 +23,9 @@ class Dice(object):
         continue
       if 'd' in field:
         (num,sides) = field.split('d')
-        num = int(num or 1) or 1
+        if num == '-':
+          num = -1
+        num = int(num or 1)
         sides = int(sides)
         Dice.dict_add(dice,sides,num)
       else:
@@ -33,10 +35,16 @@ class Dice(object):
   @staticmethod
   def dict_add(d,k,v):
 
+    if v == 0:
+      return
+
     if k in d:
       d[k] += v
     else:
       d[k] = v
+
+    if d[k] == 0:
+      del d[k]
 
   @staticmethod
   def intify(x):

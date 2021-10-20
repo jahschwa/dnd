@@ -1,20 +1,19 @@
-#!/usr/bin/env python3
-
-import sys,random
-from functools import reduce,total_ordering
+from functools import reduce, total_ordering
+import random
+import sys
 
 @total_ordering
-class Dice(object):
+class Dice:
 
   @staticmethod
   def parse(s):
 
-    s = str(s).replace(' ','')
+    s = str(s).replace(' ', '')
 
-    if not reduce(lambda a,b: a and (b.isdigit() or b in 'd+-'),s,True):
+    if not reduce(lambda a, b: a and (b.isdigit() or b in 'd+-'), s, True):
       raise ValueError('invalid Dice string "%s"' % s)
 
-    s = s.lower().replace('-','+-')
+    s = s.lower().replace('-', '+-')
     fields = [x.strip() for x in s.split('+')]
     dice = {}
     bonus = 0
@@ -22,18 +21,18 @@ class Dice(object):
       if not field:
         continue
       if 'd' in field:
-        (num,sides) = field.split('d')
+        (num, sides) = field.split('d')
         if num == '-':
           num = -1
         num = int(num or 1)
         sides = int(sides)
-        Dice.dict_add(dice,sides,num)
+        Dice.dict_add(dice, sides, num)
       else:
         bonus += int(field)
-    return (dice,bonus)
+    return (dice, bonus)
 
   @staticmethod
-  def dict_add(d,k,v):
+  def dict_add(d, k, v):
 
     if v == 0:
       return
@@ -50,51 +49,51 @@ class Dice(object):
   def intify(x):
     """cast floats to ints if they're whole numbers"""
 
-    if abs(x-int(x))<sys.float_info.epsilon:
+    if abs(x - int(x)) < sys.float_info.epsilon:
       return int(x)
     else:
       return x
 
-  def __init__(self,s=''):
-    (self.dice,self.bonus) = Dice.parse(s)
+  def __init__(self, s=''):
+    (self.dice, self.bonus) = Dice.parse(s)
 
 ########## Numeric functions ##########
 
-  def __add__(self,obj):
+  def __add__(self, obj):
 
-    if isinstance(obj,int):
+    if isinstance(obj, int):
       return self.__add_int(obj)
-    elif isinstance(obj,Dice):
+    elif isinstance(obj, Dice):
       return self.__add_dice(obj)
     else:
       return NotImplemented
 
-  def __radd__(self,obj):
+  def __radd__(self, obj):
 
-    if isinstance(obj,int):
+    if isinstance(obj, int):
       return self.__add_int(obj)
     else:
       return NotImplemented
 
-  def __sub__(self,obj):
+  def __sub__(self, obj):
 
-    if isinstance(obj,int):
+    if isinstance(obj, int):
       return self.__add_int(-obj)
-    elif isinstance(obj,Dice):
+    elif isinstance(obj, Dice):
       return self.__add_dice(-obj)
 
-  def __rsub__(self,obj):
+  def __rsub__(self, obj):
 
-    if isinstance(obj,int):
+    if isinstance(obj, int):
       return (-self).__add_int(obj)
     else:
       return NotImplemented
 
-  def __mul__(self,obj):
+  def __mul__(self, obj):
 
-    if isinstance(obj,Dice):
+    if isinstance(obj, Dice):
       obj = obj.as_int(ignore=False)
-    if isinstance(obj,int):
+    if isinstance(obj, int):
       new = self.copy()
       for d in new.dice:
         new.dice[d] *= obj
@@ -103,26 +102,26 @@ class Dice(object):
     else:
       return NotImplemented
 
-  def __rmul__(self,obj):
-    return self*obj
+  def __rmul__(self, obj):
+    return self * obj
 
-  def __truediv__(self,obj):
+  def __truediv__(self, obj):
 
     if self.dice:
       raise ValueError("this Dice isn't just an integer bonus")
-    if isinstance(obj,Dice):
+    if isinstance(obj, Dice):
       obj = obj.as_int(ignore=False)
-    if isinstance(obj,int):
-      return self.bonus/obj
+    if isinstance(obj, int):
+      return self.bonus / obj
     else:
       return NotImplemented
 
-  def __rtruediv__(self,obj):
+  def __rtruediv__(self, obj):
 
     if self.dice:
       raise ValueError("this Dice isn't just an integer bonus")
-    if isinstance(obj,int):
-      return obj/self.bonus
+    if isinstance(obj, int):
+      return obj / self.bonus
     else:
       return NotImplemented
 
@@ -135,52 +134,53 @@ class Dice(object):
     return new
 
   def __int__(self):
-    return self.as_int(False)
+    return self.as_int(ignore=False)
 
   def __float__(self):
     return float(int(self))
 
-  def __eq__(self,other):
+  def __eq__(self, other):
 
-    if isinstance(other,Dice):
-      return self.avg()==other.avg()
-    elif isinstance(other,int):
-      return self.avg()==other
+    if isinstance(other, Dice):
+      return self.avg() == other.avg()
+    elif isinstance(other, int):
+      return self.avg() == other
     return NotImplemented
 
-  def __lt__(self,other):
+  def __lt__(self, other):
 
-    if isinstance(other,Dice):
-      return self.avg()<other.avg()
-    elif isinstance(other,int):
-      return self.avg()<other
+    if isinstance(other, Dice):
+      return self.avg() < other.avg()
+    elif isinstance(other, int):
+      return self.avg() < other
     return NotImplemented
 
 ########## Helper functions ##########
 
-  def __add_int(self,i):
+  def __add_int(self, i):
 
     dice = self.copy()
     dice.bonus += i
     return dice
 
-  def __add_dice(self,d):
+  def __add_dice(self, d):
 
     dice = self.copy()
-    for (sides,num) in d.dice.items():
-      Dice.dict_add(dice.dice,sides,num)
+    for (sides, num) in d.dice.items():
+      Dice.dict_add(dice.dice, sides, num)
     dice.bonus += d.bonus
     return dice
 
 ########## Methods ##########
 
-  def same(self,other):
+  def same(self, other):
 
-    if not isinstance(other,Dice):
-      raise TypeError('invalid type %s for Dice.same()'
-          % other.__class__.__name__)
+    if not isinstance(other, Dice):
+      raise TypeError(
+        'invalid type %s for Dice.same()' % other.__class__.__name__
+      )
 
-    return str(self)==str(other)
+    return str(self) == str(other)
 
   def copy(self):
 
@@ -189,16 +189,16 @@ class Dice(object):
     dice.bonus = self.bonus
     return dice
 
-  def as_int(self,ignore=True):
+  def as_int(self, ignore=True):
 
     if not ignore and self.dice:
       raise ValueError("this Dice isn't just an integer bonus")
 
     return self.bonus
 
-  def as_dice(self,ignore=True):
+  def as_dice(self, ignore=True):
 
-    if not ignore and self.bonus!=0:
+    if not ignore and self.bonus != 0:
       raise ValueError("this Dice has a numerical bonus")
 
     return self.copy()
@@ -206,40 +206,44 @@ class Dice(object):
   def roll(self):
 
     total = 0
-    for (sides,num) in self.dice.items():
-      neg = [1,-1][num<0]
-      for i in range(0,num,neg):
-        total += random.randint(1,sides)*neg
-    return Dice.intify(total+self.bonus)
+    for (sides, num) in self.dice.items():
+      neg = [1, -1][num < 0]
+      for i in range(0, num, neg):
+        total += random.randint(1, sides) * neg
+    return Dice.intify(total + self.bonus)
 
   def min(self):
 
-    pos = [n for n in self.dice.values() if n>0]
-    neg = [n*s for (s,n) in self.dice.items() if n<0]
-    return sum(pos)+sum(neg)+self.bonus
+    pos = [n for n in self.dice.values() if n > 0]
+    neg = [n * s for (s, n) in self.dice.items() if n < 0]
+    return sum(pos) + sum(neg) + self.bonus
 
   def avg(self):
 
     avg = 0
-    for (sides,num) in self.dice.items():
-      avg += num*(sides+1)/2.0
-    return Dice.intify(avg+self.bonus)
+    for (sides, num) in self.dice.items():
+      avg += num * (sides + 1) / 2.0
+    return Dice.intify(avg + self.bonus)
 
   def max(self):
 
-    pos = [n*s for (s,n) in self.dice.items() if n>0]
-    neg = [n for n in self.dice.values() if n<0]
-    return sum(pos)+sum(neg)+self.bonus
+    pos = [n * s for (s, n) in self.dice.items() if n > 0]
+    neg = [n for n in self.dice.values() if n < 0]
+    return sum(pos) + sum(neg) + self.bonus
 
   def stats(self):
-    return self.__str__()+' = %s/%s/%s' % (self.min(),self.avg(),self.max())
+    return self.__str__() + ' = %s/%s/%s' % (self.min(), self.avg(), self.max())
 
   def __str__(self):
 
-    sides = sorted(self.dice.items(),key=lambda x:x[1]*(x[0]+1)/2.0,reverse=True)
-    s = '+'.join(['%sd%s' % (n,s) for (s,n) in sides]).replace('+-','-')
+    sides = sorted(
+      self.dice.items(),
+      key=lambda x: x[1] * (x[0] + 1) / 2.0,
+      reverse=True,
+    )
+    s = '+'.join(['%sd%s' % (n, s) for (s, n) in sides]).replace('+-', '-')
     if self.bonus or not self.dice:
-      s += '%s%s' % ('+' if self.bonus>0 else '',self.bonus)
+      s += '%s%s' % ('+' if self.bonus > 0 else '', self.bonus)
     if s.startswith('+'):
       return s[1:]
     return s
